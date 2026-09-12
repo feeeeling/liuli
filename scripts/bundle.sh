@@ -25,7 +25,14 @@ fi
 (cd "$ROOT/daemon" && npm run build)
 cp "$ROOT/daemon/dist/index.mjs" "$APP/Contents/Resources/daemon/index.mjs"
 cp "$ROOT/daemon/package.json" "$APP/Contents/Resources/daemon/package.json"
-rsync -a --delete "$ROOT/daemon/node_modules" "$APP/Contents/Resources/daemon/"
+rsync -a --delete \
+  --exclude typescript \
+  --exclude tsx \
+  --exclude esbuild \
+  --exclude '@esbuild' \
+  --exclude '@types' \
+  "$ROOT/daemon/node_modules" "$APP/Contents/Resources/daemon/"
+"$ROOT/scripts/prune-daemon-modules.sh" "$APP/Contents/Resources/daemon/node_modules"
 
 if [[ -x "$ROOT/runtime/node" ]]; then
   mkdir -p "$APP/Contents/Resources/runtime"
