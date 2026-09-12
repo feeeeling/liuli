@@ -5,6 +5,8 @@ on:
     paths:
       - "**/*.png.b64"
       - "**/*.png.b64.part*"
+      - "**/*.png.z64"
+      - "**/*.png.z64.part*"
       - "scripts/join-l2-b64.sh"
 jobs:
   materialize:
@@ -13,7 +15,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Join b64 parts (only when complete)
+      - name: Join b64/z64 parts (only when complete)
         run: |
           set -euo pipefail
           DIR=app/Resources
@@ -35,9 +37,27 @@ jobs:
             rm -f "$DIR"/"$base".part*
             echo "joined $DIR/$base from $n parts"
           }
+          # Legacy plain b64 splits
           join_if_complete AppIcon-foreground-L2-512.png.b64 12
           join_if_complete AppIcon-foreground-L2-1024.png.b64 110
           join_if_complete AppIcon-1024.png.b64 7
+          # zlib+base64 of PNG (high-entropy; preferred MCP delivery)
+          join_if_complete AppIcon-foreground-L2-512.png.z64 36
+          join_if_complete AppIcon-foreground-L2-1024.png.z64 0
+      - name: Decode z64 → PNG
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' f; do
+            out="${f%.z64}"
+            python3 - "$f" "$out" <<'PY'
+          import sys, base64, zlib
+          src, dst = sys.argv[1], sys.argv[2]
+          data = base64.b64decode(open(src).read())
+          open(dst, 'wb').write(zlib.decompress(data))
+          print(f'materialized {dst} from z64')
+          PY
+            rm -f "$f"
+          done < <(find . -name '*.png.z64' -print0)
       - name: Decode b64 PNGs
         run: |
           set -euo pipefail
@@ -55,4 +75,4 @@ jobs:
           fi
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore: materialize PNG icons from b64"
+          commit_message: "chore: materialize PNG icons from b64/z64"
