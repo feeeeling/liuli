@@ -19,23 +19,31 @@ macOS 全局翻译面板，交互接近 [Bob](https://github.com/ripperhe/Bob)�
 
 ## 安装
 
-macOS 15+，需要 [Xcode Command Line Tools](https://developer.apple.com/download/all/?q=command%20line%20tools) 和 Node.js 22+。
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/feeeeling/liuli/main/install.sh | bash
 ```
 
-会检查并安装 [Pi](https://github.com/earendil-works/pi) CLI（若本机没有 `pi`），克隆到 `~/.liuli/src`，编译后装到 `~/Applications/Liuli.app` 并打开。
+默认下载 [GitHub Releases](https://github.com/feeeeling/liuli/releases) 里的预编译 `Liuli.app`（几秒到一两分钟），装到 `~/Applications`。没有 Release 时才本地编译。
 
-从源码安装：
+强制从源码编译：
+
+```bash
+LIULI_FROM_SOURCE=1 curl -fsSL https://raw.githubusercontent.com/feeeeling/liuli/main/install.sh | bash
+```
+
+发布新版本：打 tag 后 GitHub Actions 会自动打包并上传 Release。
+
+```bash
+git tag v0.1.1 && git push origin v0.1.1
+```
+
+从源码：
 
 ```bash
 git clone https://github.com/feeeeling/liuli.git
 cd liuli
-./install.sh
+make daemon-install && make app && make install
 ```
-
-或 `make daemon-install && make app && make install`。
 
 ## 使用
 
@@ -44,7 +52,7 @@ cd liuli
 1. **辅助功能** — 划词翻译
 2. **屏幕录制** — 截图翻译 / OCR / 公式（不要开音频）
 
-然后在 **设置 → 账号** 登录模型供应商（ChatGPT 订阅用 OpenAI Codex；API Key 用对应供应商），或终端执行 `pi login`。安装脚本若未检测到 `pi`，会用 `npm i -g @earendil-works/pi-coding-agent`（失败则回退 `https://pi.dev/install.sh`）。
+然后在 **设置 → 账号** 登录模型供应商（ChatGPT 订阅用 OpenAI Codex；API Key 用对应供应商），或终端执行 `pi login`。安装脚本若未检测到 `pi`，会接着安装 Pi CLI。
 
 | 快捷键 | 作用 |
 | --- | --- |

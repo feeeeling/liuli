@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build
+        run: |
+          make daemon-install
+          scripts/vendor-node.sh
+          make app
+          ditto -c -k --keepParent dist/Liuli.app Liuli-macos-arm64.zip
+      - name: Upload release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Liuli-macos-arm64.zip
+          generate_release_notes: true
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v0.0.{0}', github.run_number) }}
+          fail_on_unmatched_files: true
