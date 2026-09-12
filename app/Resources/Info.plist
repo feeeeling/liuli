@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh_CN</string>
+	<key>CFBundleDisplayName</key>
+	<string>琉璃</string>
+	<key>CFBundleExecutable</key>
+	<string>Liuli</string>
+	<key>CFBundleIdentifier</key>
+	<string>app.liuli.desktop</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>琉璃</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>NSSupportsSuddenTermination</key>
+	<false/>
+	<key>NSAccessibilityUsageDescription</key>
+	<string>琉璃需要辅助功能权限，才能读取你在其它应用里选中的文字。</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>琉璃只截取你框选的画面做翻译和 OCR，不会录音频，也不会使用麦克风。</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>琉璃需要发送拷贝命令，以便在无法通过辅助功能读取选区时获取文本。</string>
+</dict>
+</plist>

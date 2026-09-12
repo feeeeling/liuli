@@ -1,0 +1,15 @@
+.DS_Store
+**/.DS_Store
+.build/
+**/.build/
+.swiftpm/
+**/.swiftpm/
+dist/
+node_modules/
+app/.build/
+daemon/dist/
+daemon/node_modules/
+runtime/
+*.xcodeproj
+*.xcuserstate
+.idea/

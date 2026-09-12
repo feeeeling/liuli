@@ -1,0 +1,26 @@
+{
+  "name": "liuli-daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "琉璃 — Pi Agent daemon for translation / OCR / LaTeX",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "build": "node scripts/build.mjs",
+    "test": "tsx --test src/*.test.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.85.1",
+    "undici": "^7.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "esbuild": "^0.25.9",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}
