@@ -12,17 +12,19 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Join AppIcon b64 parts
+      - name: Join b64 parts
         run: |
           set -euo pipefail
           DIR=app/Resources
           shopt -s nullglob
-          parts=("$DIR"/AppIcon-1024.png.b64.part*)
-          if [[ ${#parts[@]} -gt 0 ]]; then
-            cat "$DIR"/AppIcon-1024.png.b64.part* >"$DIR/AppIcon-1024.png.b64"
-            rm -f "$DIR"/AppIcon-1024.png.b64.part*
-            echo "joined AppIcon-1024.png.b64"
-          fi
+          for base in AppIcon-foreground-L2-512.png.b64 AppIcon-foreground-L2-1024.png.b64 AppIcon-1024.png.b64; do
+            parts=("$DIR"/"$base".part*)
+            if [[ ${#parts[@]} -gt 0 ]]; then
+              cat "$DIR"/"$base".part* >"$DIR/$base"
+              rm -f "$DIR"/"$base".part*
+              echo "joined $DIR/$base"
+            fi
+          done
       - name: Decode b64 PNGs
         run: |
           set -euo pipefail
