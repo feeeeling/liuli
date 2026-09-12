@@ -4,6 +4,8 @@ macOS 全局翻译面板，交互接近 [Bob](https://github.com/ripperhe/Bob)�
 
 底层是随 App 启停的 [Pi Agent](https://github.com/earendil-works/pi) 守护进程。凭证写在 `~/.pi/agent/auth.json`，和终端 `pi` 共用。
 
+面板在 **macOS 26（Tahoe）+** 使用系统液态玻璃（`NSGlassEffectView`）；**macOS 15–25** 自动降级为 `NSVisualEffectView` 磨砂玻璃，最低系统仍是 15.0。
+
 ```
 选中文字 / 截图 / 输入
         │
