@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "**/*.png.b64"
+      - "**/*.png.b64.part*"
       - "scripts/join-l2-b64.sh"
 jobs:
   materialize:
