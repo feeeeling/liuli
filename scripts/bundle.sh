@@ -11,6 +11,9 @@ if [[ ! -x "$BIN" ]]; then
 fi
 
 APP="$ROOT/dist/Liuli.app"
+if [[ -L "$APP/Contents/Resources/daemon" ]]; then
+  rm -f "$APP/Contents/Resources/daemon"
+fi
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/daemon"
 cp "$BIN" "$APP/Contents/MacOS/Liuli"
 cp "$ROOT/app/Resources/Info.plist" "$APP/Contents/Info.plist"
