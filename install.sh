@@ -28,6 +28,37 @@ if ! command -v git >/dev/null 2>&1; then
   exit 1
 fi
 
+ensure_pi() {
+  if command -v pi >/dev/null 2>&1; then
+    echo "已检测到 pi：$(command -v pi)"
+    pi --version 2>/dev/null || true
+    return 0
+  fi
+  echo "未检测到 pi CLI，正在安装 @earendil-works/pi-coding-agent…"
+  if npm install -g --ignore-scripts @earendil-works/pi-coding-agent; then
+    hash -r 2>/dev/null || true
+    if command -v pi >/dev/null 2>&1; then
+      echo "pi 已安装：$(command -v pi)"
+      return 0
+    fi
+  fi
+  echo "npm 全局安装失败，改用官方安装脚本…"
+  curl -fsSL https://pi.dev/install.sh | sh
+  # Official installer often puts pi in ~/.local/bin or npm prefix
+  export PATH="${HOME}/.local/bin:${HOME}/.npm-global/bin:/usr/local/bin:${PATH}"
+  hash -r 2>/dev/null || true
+  if command -v pi >/dev/null 2>&1; then
+    echo "pi 已安装：$(command -v pi)"
+    return 0
+  fi
+  echo "pi 安装失败。请手动执行:" >&2
+  echo "  npm install -g --ignore-scripts @earendil-works/pi-coding-agent" >&2
+  echo "或: curl -fsSL https://pi.dev/install.sh | sh" >&2
+  exit 1
+}
+
+ensure_pi
+
 mkdir -p "$SRC" "$DEST"
 if [[ -d "$SRC/.git" ]]; then
   echo "更新源码 $SRC"
