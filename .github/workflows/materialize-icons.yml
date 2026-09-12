@@ -1,10 +1,10 @@
 name: Materialize icons
 on:
+  workflow_dispatch:
   push:
     paths:
       - "**/*.png.b64"
-      - "**/*.png.b64.part*"
-  workflow_dispatch:
+      - "scripts/join-l2-b64.sh"
 jobs:
   materialize:
     runs-on: ubuntu-latest
@@ -12,19 +12,31 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Join b64 parts
+      - name: Join b64 parts (only when complete)
         run: |
           set -euo pipefail
           DIR=app/Resources
           shopt -s nullglob
-          for base in AppIcon-foreground-L2-512.png.b64 AppIcon-foreground-L2-1024.png.b64 AppIcon-1024.png.b64; do
-            parts=("$DIR"/"$base".part*)
-            if [[ ${#parts[@]} -gt 0 ]]; then
-              cat "$DIR"/"$base".part* >"$DIR/$base"
-              rm -f "$DIR"/"$base".part*
-              echo "joined $DIR/$base"
+          join_if_complete() {
+            local base="$1"
+            local expected="$2"
+            local parts=("$DIR"/"$base".part*)
+            local n=${#parts[@]}
+            if [[ "$n" -eq 0 ]]; then
+              echo "no parts for $base"
+              return 0
             fi
-          done
+            if [[ "$n" -ne "$expected" ]]; then
+              echo "incomplete parts for $base: have $n expected $expected — skipping join"
+              return 0
+            fi
+            cat "$DIR"/"$base".part* >"$DIR/$base"
+            rm -f "$DIR"/"$base".part*
+            echo "joined $DIR/$base from $n parts"
+          }
+          join_if_complete AppIcon-foreground-L2-512.png.b64 12
+          join_if_complete AppIcon-foreground-L2-1024.png.b64 110
+          join_if_complete AppIcon-1024.png.b64 7
       - name: Decode b64 PNGs
         run: |
           set -euo pipefail
