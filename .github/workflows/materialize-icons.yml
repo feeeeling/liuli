@@ -1,0 +1,31 @@
+name: Materialize icons
+on:
+  push:
+    paths:
+      - "**/*.png.b64"
+  workflow_dispatch:
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode b64 PNGs
+        run: |
+          set -euo pipefail
+          found=0
+          while IFS= read -r -d '' f; do
+            out="${f%.b64}"
+            mkdir -p "$(dirname "$out")"
+            base64 -d "$f" > "$out"
+            rm "$f"
+            found=1
+            echo "materialized $out"
+          done < <(find . -name '*.png.b64' -print0)
+          if [[ "$found" -eq 0 ]]; then
+            echo "No .png.b64 files"
+          fi
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: materialize PNG icons from b64"
