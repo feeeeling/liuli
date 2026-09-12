@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - "**/*.png.b64"
+      - "**/*.png.b64.part*"
   workflow_dispatch:
 jobs:
   materialize:
@@ -11,6 +12,17 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - name: Join AppIcon b64 parts
+        run: |
+          set -euo pipefail
+          DIR=app/Resources
+          shopt -s nullglob
+          parts=("$DIR"/AppIcon-1024.png.b64.part*)
+          if [[ ${#parts[@]} -gt 0 ]]; then
+            cat "$DIR"/AppIcon-1024.png.b64.part* >"$DIR/AppIcon-1024.png.b64"
+            rm -f "$DIR"/AppIcon-1024.png.b64.part*
+            echo "joined AppIcon-1024.png.b64"
+          fi
       - name: Decode b64 PNGs
         run: |
           set -euo pipefail
