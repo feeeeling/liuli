@@ -22,17 +22,11 @@ struct LiuliApp: App {
         .commands {
             CommandMenu("翻译") {
                 Button("选中翻译") { delegate.appState.translateSelection() }
-                    .keyboardShortcut("d", modifiers: .option)
                 Button("截图翻译") { delegate.appState.screenshotTranslate() }
-                    .keyboardShortcut("s", modifiers: .option)
                 Button("截图 OCR") { delegate.appState.screenshotOCR() }
-                    .keyboardShortcut("s", modifiers: [.option, .shift])
                 Button("公式转 LaTeX") { delegate.appState.formulaToLatex() }
-                    .keyboardShortcut("l", modifiers: .option)
                 Button("输入翻译") { delegate.appState.inputTranslate() }
-                    .keyboardShortcut("a", modifiers: .option)
                 Button("静默 OCR") { delegate.appState.silentOCR() }
-                    .keyboardShortcut("c", modifiers: .option)
             }
         }
     }
@@ -98,17 +92,11 @@ struct MenuBarContent: View {
                 .foregroundStyle(.secondary)
             Divider()
             Button("选中翻译") { state.translateSelection() }
-                .keyboardShortcut("d", modifiers: .option)
             Button("截图翻译") { state.screenshotTranslate() }
-                .keyboardShortcut("s", modifiers: .option)
             Button("截图 OCR") { state.screenshotOCR() }
-                .keyboardShortcut("s", modifiers: [.option, .shift])
             Button("公式转 LaTeX") { state.formulaToLatex() }
-                .keyboardShortcut("l", modifiers: .option)
             Button("输入翻译") { state.inputTranslate() }
-                .keyboardShortcut("a", modifiers: .option)
             Button("静默 OCR") { state.silentOCR() }
-                .keyboardShortcut("c", modifiers: .option)
             Divider()
             Button("打开辅助功能设置…") { Permissions.openAccessibilitySettings() }
             Button("打开屏幕录制设置…") { Permissions.openScreenRecordingSettings() }

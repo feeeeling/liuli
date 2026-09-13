@@ -115,11 +115,23 @@ final class HotKeyManager {
 
     func reregister() {
         for ref in refs {
-            if let ref { UnregisterEventHotKey(ref) }
+            if let ref {
+                let status = UnregisterEventHotKey(ref)
+                if status != noErr {
+                    NSLog("[liuli] UnregisterEventHotKey failed: \(status)")
+                }
+            }
         }
         refs.removeAll()
+        var seen = Set<String>()
         for action in HotKeyAction.allCases {
             let chord = state.chord(for: action)
+            let fingerprint = "\(chord.keyCode)-\(chord.modifiers)"
+            if seen.contains(fingerprint) {
+                NSLog("[liuli] skip duplicate hotkey \(action.rawValue) \(chord.display)")
+                continue
+            }
+            seen.insert(fingerprint)
             var ref: EventHotKeyRef?
             let hotKeyID = EventHotKeyID(signature: fourChar("LIUL"), id: action.carbonID)
             let status = RegisterEventHotKey(
@@ -154,6 +166,7 @@ final class HotKeyManager {
                 &hotKeyID
             )
             let id = hotKeyID.id
+            guard hotKeyID.signature == fourChar("LIUL") else { return noErr }
             Task { @MainActor in
                 let manager = Unmanaged<HotKeyManager>.fromOpaque(userData).takeUnretainedValue()
                 manager.handle(id: id)
