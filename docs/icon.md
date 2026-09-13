@@ -8,7 +8,6 @@
 | --- | --- |
 | `app/Resources/AppIcon-foreground-leaf-1024.png` | Icon Composer 前景（真 alpha，无方板、无投影） |
 | `app/Resources/AppIcon-1024.png` | 旧系统 / `.icns` 回退（浅色圆角底板 + 叶子） |
-| `app/Resources/MenuBarLeaf.png` | 菜单栏 template（黑剪影） |
 | `docs/assets/icon.png` | README 预览 |
 
 ## macOS 液态玻璃流程
