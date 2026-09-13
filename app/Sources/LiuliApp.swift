@@ -6,9 +6,11 @@ struct LiuliApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
 
     var body: some Scene {
-        MenuBarExtra("琉璃", systemImage: "translate") {
+        MenuBarExtra {
             MenuBarContent()
                 .environment(delegate.appState)
+        } label: {
+            MenuBarLeafIcon()
         }
         .menuBarExtraStyle(.menu)
 
@@ -65,6 +67,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         Task { await DaemonClient.shared.abort() }
         DaemonProcess.stop()
+    }
+}
+
+private struct MenuBarLeafIcon: View {
+    var body: some View {
+        Image(nsImage: Self.image)
+    }
+
+    private static var image: NSImage {
+        let loaded = NSImage(named: "MenuBarLeaf")
+            ?? Bundle.main.url(forResource: "MenuBarLeaf", withExtension: "png").flatMap(NSImage.init(contentsOf:))
+        guard let image = loaded else {
+            return NSImage(systemSymbolName: "leaf", accessibilityDescription: "琉璃")
+                ?? NSImage(size: NSSize(width: 18, height: 18))
+        }
+        image.isTemplate = true
+        image.size = NSSize(width: 18, height: 18)
+        return image
     }
 }
 

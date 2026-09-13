@@ -11,6 +11,10 @@ fi
 RES="$APP/Contents/Resources"
 mkdir -p "$RES"
 
+if [[ -f "$ROOT/app/Resources/MenuBarLeaf.png" ]]; then
+  cp "$ROOT/app/Resources/MenuBarLeaf.png" "$RES/MenuBarLeaf.png"
+fi
+
 ICON_PNG="$ROOT/app/Resources/AppIcon-1024.png"
 if [[ -f "$ICON_PNG" ]] && command -v iconutil >/dev/null 2>&1 && command -v sips >/dev/null 2>&1; then
   ICONSET="$(mktemp -d)/AppIcon.iconset"
