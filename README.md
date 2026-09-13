@@ -38,7 +38,7 @@ LIULI_FROM_SOURCE=1 curl -fsSL https://raw.githubusercontent.com/feeeeling/liuli
 发布新版本：打 tag 后 GitHub Actions 会自动打包并上传 Release。
 
 ```bash
-git tag v0.1.1 && git push origin v0.1.1
+git tag v0.2.0 && git push origin v0.2.0
 ```
 
 从源码：
@@ -66,6 +66,7 @@ make daemon-install && make app && make install
 | ⌥L | 公式转 LaTeX |
 | ⌥A | 输入翻译 |
 | ⌥C | 静默 OCR（复制到剪贴板） |
+| 译文下方 `>` | 简要解释并追问；可检索本地 wiki |
 | Esc | 关闭面板 |
 
 快捷键可在设置里改。与 Bob 同时开着会冲突。

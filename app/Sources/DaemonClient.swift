@@ -53,7 +53,12 @@ actor DaemonClient {
     struct TaskRequest: Encodable {
         var id: String
         var mode: TaskMode
+        var action: String = "task"
+        var keepSession: Bool = false
         var text: String?
+        var context: String?
+        var reading: String?
+        var wikiRoot: String?
         var imageBase64: String?
         var mimeType: String?
         var targetLang: String
@@ -166,9 +171,14 @@ actor DaemonClient {
         var payload: [String: Any] = [
             "id": task.id,
             "mode": task.mode.rawValue,
+            "action": task.action,
+            "keepSession": task.keepSession,
             "targetLang": task.targetLang,
         ]
         if let text = task.text { payload["text"] = text }
+        if let context = task.context { payload["context"] = context }
+        if let reading = task.reading { payload["reading"] = reading }
+        if let wikiRoot = task.wikiRoot { payload["wikiRoot"] = wikiRoot }
         if let image = task.imageBase64 { payload["imageBase64"] = image }
         if let mime = task.mimeType { payload["mimeType"] = mime }
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
@@ -177,7 +187,7 @@ actor DaemonClient {
 
         let (bytes, response) = try await session.bytes(for: request)
         if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
-            throw DaemonError.http(http.statusCode)
+            throw await daemonHTTPError(status: http.statusCode, bytes: bytes)
         }
         var assembled = ""
         try await consumeSSE(bytes) { event, json in
@@ -279,6 +289,31 @@ actor DaemonClient {
             }
         }
     }
+}
+
+private func daemonHTTPError(status: Int, bytes: URLSession.AsyncBytes) async -> DaemonError {
+    var body = ""
+    do {
+        for try await line in bytes.lines {
+            body += line
+            if body.count > 800 { break }
+        }
+    } catch {
+        return .http(status)
+    }
+    if let data = body.data(using: .utf8),
+       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    {
+        let message = (json["error"] as? String) ?? (json["message"] as? String)
+        if let message, !message.isEmpty {
+            return .server(message)
+        }
+    }
+    let snippet = body.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !snippet.isEmpty {
+        return .server("HTTP \(status)：\(snippet.prefix(200))")
+    }
+    return .http(status)
 }
 
 private func sseJSONObject(_ raw: String) -> [String: Any]? {

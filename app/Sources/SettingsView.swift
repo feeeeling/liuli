@@ -1,3 +1,4 @@
+import AppKit
 import ServiceManagement
 import SwiftUI
 
@@ -38,6 +39,31 @@ private struct GeneralSettingsTab: View {
                     .onChange(of: state.enhanceSilentOCR) { _, _ in
                         state.persist()
                     }
+            }
+            Section("追问上下文") {
+                HStack {
+                    TextField("llm-wiki 目录", text: Bindable(state).wikiRoot)
+                        .onChange(of: state.wikiRoot) { _, _ in
+                            state.persist()
+                        }
+                    Button("选择…") {
+                        let panel = NSOpenPanel()
+                        panel.canChooseDirectories = true
+                        panel.canChooseFiles = false
+                        panel.allowsMultipleSelection = false
+                        panel.title = "选择 llm-wiki 目录"
+                        if !state.wikiRoot.isEmpty {
+                            panel.directoryURL = URL(fileURLWithPath: state.wikiRoot)
+                        }
+                        if panel.runModal() == .OK, let url = panel.url {
+                            state.wikiRoot = url.path
+                            state.persist()
+                        }
+                    }
+                }
+                Text("点「>」追问时，模型可以自行搜索这个 wiki。留空则不开放 wiki。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("开机自启") {
                 Toggle("登录时启动琉璃", isOn: $launchAtLogin)

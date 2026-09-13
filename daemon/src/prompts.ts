@@ -1,4 +1,4 @@
-import type { TaskMode } from "./types.ts";
+import type { TaskAction, TaskMode } from "./types.ts";
 
 export const SYSTEM_PROMPT = `你是琉璃（Liuli），macOS 全局翻译 / OCR / 公式识别引擎。
 你的回复会直接显示在一块很小的悬浮玻璃面板里，必须遵守：
@@ -66,4 +66,34 @@ export function buildUserPrompt(input: {
 - 上标下标一律用大括号：1^{\\kappa}、g^{x}
 - 不要 tikz、不要 \\scalebox、不要中文说明`;
   }
+}
+
+export function buildContinuePrompt(input: {
+  action: TaskAction;
+  text?: string;
+  context?: string;
+  reading?: string;
+  wikiAvailable?: boolean;
+  seedContext: boolean;
+  targetLang?: string;
+}): string {
+  const lang = languageName(input.targetLang);
+  const parts: string[] = [];
+  if (input.seedContext && input.context?.trim()) {
+    parts.push(`这是用户正在看的内容：\n${input.context.trim()}`);
+  }
+  if (input.reading?.trim()) {
+    parts.push(`用户当前阅读环境：\n${input.reading.trim()}`);
+  }
+  if (input.wikiAvailable) {
+    parts.push(
+      `用户有一份本地 llm-wiki。需要背景时用工具，可以多轮、也可以一次并读多页：先 wiki_search(query) 找候选，再 wiki_read(path) 读最相关的几篇；不够就换关键词再 search，或继续 read。引用写相对路径。不要编造 wiki 里没有的内容。不需要背景就不要搜。`,
+    );
+  }
+  const extra = parts.length > 0 ? `${parts.join("\n\n")}\n\n` : "";
+  if (input.action === "explain") {
+    return `${extra}用${lang}两三句话简要解释。点出关键意思、可能的歧义和必要背景。不要复述原文或译文，不要标题，不要列表，不要 markdown。`;
+  }
+  const question = input.text?.trim() || "请继续解释。";
+  return `${extra}用户追问（小面板里简短作答，不要标题，不要 markdown）：\n${question}`;
 }

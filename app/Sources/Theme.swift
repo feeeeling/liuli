@@ -3,6 +3,7 @@ import SwiftUI
 enum LiuliTheme {
     static let panelWidth: CGFloat = 420
     static let panelPadding: CGFloat = 16
+    static let followUpPanelMaxHeight: CGFloat = 560
     static let sectionSpacing: CGFloat = 12
     static let chipRadius: CGFloat = 8
     static let cardRadius: CGFloat = 10

@@ -27,7 +27,12 @@ cp "$BIN" "$APP/Contents/MacOS/Liuli"
 cp "$ROOT/app/Resources/Info.plist" "$APP/Contents/Info.plist"
 echo -n 'APPL????' >"$APP/Contents/PkgInfo"
 "$ROOT/scripts/embed-icons.sh" "$APP"
-ln -sfn "$ROOT/daemon" "$APP/Contents/Resources/daemon"
+DAEMON_LINK="$APP/Contents/Resources/daemon"
+# ln -sfn into an existing directory creates dest/daemon instead of replacing dest.
+if [[ -e "$DAEMON_LINK" && ! -L "$DAEMON_LINK" ]]; then
+  rm -rf "$DAEMON_LINK"
+fi
+ln -sfn "$ROOT/daemon" "$DAEMON_LINK"
 
 IDENTITY="$("$ROOT/scripts/ensure-signing-identity.sh")"
 if [[ "$IDENTITY" == "-" ]]; then

@@ -6,13 +6,21 @@ export const TASK_MODES = [
 ] as const;
 export type TaskMode = (typeof TASK_MODES)[number];
 
+export const TASK_ACTIONS = ["task", "explain", "followup"] as const;
+export type TaskAction = (typeof TASK_ACTIONS)[number];
+
 export const AUTH_TYPES = ["api_key", "oauth"] as const;
 export type AuthKind = (typeof AUTH_TYPES)[number];
 
 export interface TaskRequest {
   id?: string;
   mode: TaskMode;
+  action?: TaskAction;
+  keepSession?: boolean;
   text?: string;
+  context?: string;
+  reading?: string;
+  wikiRoot?: string;
   imageBase64?: string;
   mimeType?: string;
   targetLang?: string;
@@ -63,6 +71,13 @@ export function isTaskMode(value: unknown): value is TaskMode {
   );
 }
 
+export function isTaskAction(value: unknown): value is TaskAction {
+  return (
+    typeof value === "string" &&
+    (TASK_ACTIONS as readonly string[]).includes(value)
+  );
+}
+
 export function isAuthKind(value: unknown): value is AuthKind {
   return (
     typeof value === "string" &&
@@ -80,10 +95,16 @@ export function parseTask(raw: string): TaskRequest {
   if (!parsed || typeof parsed !== "object") throw new Error("无效 JSON");
   const body = parsed as Record<string, unknown>;
   if (!isTaskMode(body.mode)) throw new Error("无效 mode");
+  const action = isTaskAction(body.action) ? body.action : "task";
   return {
     id: typeof body.id === "string" ? body.id : undefined,
     mode: body.mode,
+    action,
+    keepSession: body.keepSession === true,
     text: typeof body.text === "string" ? body.text : undefined,
+    context: typeof body.context === "string" ? body.context : undefined,
+    reading: typeof body.reading === "string" ? body.reading : undefined,
+    wikiRoot: typeof body.wikiRoot === "string" ? body.wikiRoot : undefined,
     imageBase64:
       typeof body.imageBase64 === "string" ? body.imageBase64 : undefined,
     mimeType: typeof body.mimeType === "string" ? body.mimeType : undefined,

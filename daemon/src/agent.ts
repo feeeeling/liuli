@@ -12,7 +12,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { buildUserPrompt, SYSTEM_PROMPT } from "./prompts.ts";
+import { buildContinuePrompt, buildUserPrompt, SYSTEM_PROMPT } from "./prompts.ts";
+import { createWikiTools } from "./wiki.ts";
 import type {
   AuthKind,
   HealthResponse,
@@ -121,6 +122,8 @@ export class LiuliAgent {
     { resolve: (value: string) => void; reject: (error: Error) => void }
   >();
   private loginAbort: AbortController | undefined;
+  private wikiRoot = "";
+  private readonly wikiTools = createWikiTools(() => this.wikiRoot);
 
   async start(): Promise<HealthResponse> {
     ensureHome();
@@ -339,22 +342,56 @@ export class LiuliAgent {
     if (session.isStreaming) {
       await session.abort();
     }
-    session.agent.state.messages = [];
 
-    const hasImage = Boolean(task.imageBase64);
+    const continuing =
+      task.keepSession === true &&
+      (task.action === "explain" || task.action === "followup");
+    if (!continuing) {
+      session.agent.state.messages = [];
+    }
+
+    this.wikiRoot = task.wikiRoot?.trim() ?? "";
+    const useWiki =
+      Boolean(this.wikiRoot) &&
+      (task.action === "explain" || task.action === "followup");
+    session.setActiveToolsByName(useWiki ? ["wiki_search", "wiki_read"] : []);
+
+    const hasImage = Boolean(task.imageBase64) && !continuing;
     if (hasImage && this.model && !isVision(this.model)) {
       throw new Error(
         `当前模型 ${modelKey(this.model)} 不支持图像，请在设置里换成带视觉的模型`,
       );
     }
 
-    const prompt = buildUserPrompt({
-      mode: task.mode,
-      text: task.text,
-      hasImage,
-      targetLang: task.targetLang,
-      sourceLang: task.sourceLang,
-    });
+    const hasHistory = session.agent.state.messages.length > 0;
+    if (
+      (task.action === "explain" || task.action === "followup") &&
+      !hasHistory &&
+      !task.context?.trim() &&
+      !task.text?.trim() &&
+      !task.imageBase64
+    ) {
+      throw new Error("没有可继续的对话");
+    }
+
+    const prompt =
+      task.action === "explain" || task.action === "followup"
+        ? buildContinuePrompt({
+            action: task.action,
+            text: task.text,
+            context: task.context,
+            reading: task.reading,
+            wikiAvailable: useWiki,
+            seedContext: !hasHistory,
+            targetLang: task.targetLang,
+          })
+        : buildUserPrompt({
+            mode: task.mode,
+            text: task.text,
+            hasImage,
+            targetLang: task.targetLang,
+            sourceLang: task.sourceLang,
+          });
 
     let full = "";
     const unsub = session.subscribe((event: AgentSessionEvent) => {
@@ -429,13 +466,16 @@ export class LiuliAgent {
       thinkingLevel: "off",
       modelRuntime: this.runtime,
       resourceLoader: loader,
-      noTools: "all",
+      noTools: "builtin",
+      customTools: this.wikiTools,
+      tools: ["wiki_search", "wiki_read"],
       sessionManager: SessionManager.inMemory(cwd),
       settingsManager: SettingsManager.inMemory({
         compaction: { enabled: false },
         retry: { enabled: true, maxRetries: 2 },
       }),
     });
+    session.setActiveToolsByName([]);
     this.session = session;
   }
 }

@@ -70,17 +70,22 @@ enum DaemonProcess {
         else { return }
 
         let bundled = daemonDir.appending(path: "index.mjs")
+        let distBundled = daemonDir.appending(path: "dist/index.mjs")
         let tsx = daemonDir.appending(path: "node_modules/.bin/tsx")
         let entry = daemonDir.appending(path: "src/index.ts")
 
         let child = Process()
         child.executableURL = node
-        if FileManager.default.fileExists(atPath: bundled.path) {
-            child.arguments = [bundled.path]
-        } else if FileManager.default.fileExists(atPath: tsx.path),
-                  FileManager.default.fileExists(atPath: entry.path)
+        // Prefer TypeScript when present so `make dev` (symlink to source) picks up
+        // daemon edits. Packaged builds only ship index.mjs.
+        if FileManager.default.fileExists(atPath: tsx.path),
+           FileManager.default.fileExists(atPath: entry.path)
         {
             child.arguments = [tsx.path, entry.path]
+        } else if FileManager.default.fileExists(atPath: bundled.path) {
+            child.arguments = [bundled.path]
+        } else if FileManager.default.fileExists(atPath: distBundled.path) {
+            child.arguments = [distBundled.path]
         } else {
             return
         }

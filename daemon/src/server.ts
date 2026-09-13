@@ -183,8 +183,18 @@ export function startServer(agent: LiuliAgent): http.Server {
           });
           return;
         }
-        if (!task.text?.trim() && !task.imageBase64) {
+        const continuing =
+          task.action === "explain" || task.action === "followup";
+        if (
+          !continuing &&
+          !task.text?.trim() &&
+          !task.imageBase64
+        ) {
           sendJson(res, 400, { error: "需要 text 或 imageBase64" });
+          return;
+        }
+        if (task.action === "followup" && !task.text?.trim()) {
+          sendJson(res, 400, { error: "需要追问内容" });
           return;
         }
 

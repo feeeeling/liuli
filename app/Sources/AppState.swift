@@ -33,9 +33,17 @@ final class AppState {
     var screenRecordingTrusted = false
     var panelManualSize: CGSize?
     var panelLiveResizing = false
+    var followUpOpen = false
+    var followUpDraft = ""
+    var followUpMessages: [FollowUpMessage] = []
+    var streamingFollowUp = false
+    var canContinueSession = false
+    var readingSnapshot = ReadingSnapshot()
+    var wikiRoot = ""
 
     var onShowPanel: (() -> Void)?
     var onHidePanel: (() -> Void)?
+    var onFollowUpOpen: (() -> Void)?
     var openSettings: (() -> Void)?
     var onHotKeysChanged: (() -> Void)?
     var onPanelResizeReset: (() -> Void)?
@@ -54,6 +62,7 @@ final class AppState {
         }
         selectedModelID = defaults.string(forKey: "liuli.model") ?? ""
         enhanceSilentOCR = defaults.object(forKey: "liuli.enhanceSilentOCR") as? Bool ?? true
+        wikiRoot = defaults.string(forKey: "liuli.wikiRoot") ?? WikiLookup.defaultRoot()
         history = historyStore.load()
         let storedW = defaults.double(forKey: "liuli.panelW")
         let storedH = defaults.double(forKey: "liuli.panelH")
@@ -104,6 +113,7 @@ final class AppState {
         defaults.set(targetLang.rawValue, forKey: "liuli.targetLang")
         defaults.set(selectedModelID, forKey: "liuli.model")
         defaults.set(enhanceSilentOCR, forKey: "liuli.enhanceSilentOCR")
+        defaults.set(wikiRoot, forKey: "liuli.wikiRoot")
         if let size = panelManualSize {
             defaults.set(size.width, forKey: "liuli.panelW")
             defaults.set(size.height, forKey: "liuli.panelH")
@@ -146,6 +156,8 @@ final class AppState {
         sourceText = ""
         resultText = ""
         lastError = nil
+        resetFollowUp()
+        captureReadingSnapshot()
         needsKeyWindow = true
         showPanel()
     }
@@ -173,6 +185,7 @@ final class AppState {
 
     func hideIfAllowed() {
         guard !isPinned, !isSelectingRegion else { return }
+        resetFollowUp()
         isPanelVisible = false
         needsKeyWindow = false
         onHidePanel?()
@@ -189,7 +202,31 @@ final class AppState {
         resultText = entry.result
         lastError = nil
         screenshot = nil
+        resetFollowUp()
         showPanel()
+    }
+
+    func expandFollowUp() {
+        guard !followUpOpen else { return }
+        let hasContent = !resultText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard hasContent, !isStreaming else { return }
+        followUpOpen = true
+        needsKeyWindow = true
+        NSApp.activate(ignoringOtherApps: true)
+        showPanel()
+        onFollowUpOpen?()
+        Task { await runFollowUp(action: "explain") }
+    }
+
+    func submitFollowUp() {
+        let question = followUpDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !question.isEmpty, !isStreaming else { return }
+        followUpDraft = ""
+        followUpMessages.append(
+            FollowUpMessage(id: UUID().uuidString, role: .user, text: question)
+        )
+        Task { await runFollowUp(action: "followup", text: question) }
     }
 
     func refreshHealth() async {
@@ -327,11 +364,108 @@ final class AppState {
         }
     }
 
+    private func resetFollowUp() {
+        followUpOpen = false
+        followUpDraft = ""
+        followUpMessages = []
+        streamingFollowUp = false
+        canContinueSession = false
+        readingSnapshot = ReadingSnapshot()
+    }
+
+    private func captureReadingSnapshot() {
+        let snap = ReadingCapture.snapshot()
+        if !snap.isEmpty {
+            readingSnapshot = snap
+        }
+    }
+
+    private func followUpContext() -> String {
+        var parts: [String] = []
+        let source = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let result = resultText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !source.isEmpty {
+            parts.append("原文：\n\(source)")
+        }
+        if !result.isEmpty {
+            let label = mode == .ocr ? "识别" : (mode == .latex ? "LaTeX" : "译文")
+            parts.append("\(label)：\n\(result)")
+        }
+        return parts.joined(separator: "\n\n")
+    }
+
+    private func runFollowUp(action: String, text: String? = nil) async {
+        streamTask?.cancel()
+        await DaemonClient.shared.abort()
+        if readingSnapshot.isEmpty {
+            captureReadingSnapshot()
+        }
+        let context = followUpContext()
+        guard action != "followup" || !(text?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) else {
+            return
+        }
+        guard action == "followup" || !context.isEmpty else {
+            lastError = "没有可解释的内容"
+            return
+        }
+        let wiki = wikiRoot.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let request = DaemonClient.TaskRequest(
+            id: UUID().uuidString,
+            mode: mode,
+            action: action,
+            keepSession: canContinueSession,
+            text: text,
+            context: context.isEmpty ? nil : context,
+            reading: readingSnapshot.formatted().isEmpty ? nil : readingSnapshot.formatted(),
+            wikiRoot: wiki.isEmpty ? nil : wiki,
+            targetLang: targetLang.rawValue
+        )
+
+        isStreaming = true
+        streamingFollowUp = true
+        lastError = nil
+        status = "生成中…"
+        followUpMessages.append(
+            FollowUpMessage(id: UUID().uuidString, role: .assistant, text: "")
+        )
+        let assistantID = followUpMessages.last?.id
+
+        streamTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await DaemonClient.shared.stream(request) { delta in
+                    await MainActor.run {
+                        guard let assistantID,
+                              let index = self.followUpMessages.firstIndex(where: { $0.id == assistantID })
+                        else { return }
+                        self.followUpMessages[index].text += delta
+                    }
+                }
+                self.isStreaming = false
+                self.streamingFollowUp = false
+                self.canContinueSession = true
+                self.status = self.daemonConnected ? "已连接 \(self.modelName)" : "完成"
+            } catch is CancellationError {
+                self.isStreaming = false
+                self.streamingFollowUp = false
+            } catch {
+                self.isStreaming = false
+                self.streamingFollowUp = false
+                self.lastError = error.localizedDescription
+                self.status = "出错"
+            }
+        }
+        await streamTask?.value
+    }
+
     private func translateSelectionAsync() async {
         mode = .translate
         screenshot = nil
+        resetFollowUp()
         needsKeyWindow = false
         let text = await SelectionCapture.readSelectedText()
+        captureReadingSnapshot()
         guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             sourceText = ""
             resultText = ""
@@ -350,7 +484,9 @@ final class AppState {
 
     private func captureAndRun(mode: TaskMode) async {
         self.mode = mode
+        resetFollowUp()
         needsKeyWindow = false
+        captureReadingSnapshot()
         guard let image = await captureRegion() else { return }
         screenshot = image
         sourceText = mode == .latex ? "" : VisionOCR.recognize(image)
@@ -413,6 +549,11 @@ final class AppState {
     private func runCurrentTask(recordHistory: Bool = true) async {
         streamTask?.cancel()
         await DaemonClient.shared.abort()
+        followUpOpen = false
+        followUpDraft = ""
+        followUpMessages = []
+        streamingFollowUp = false
+        canContinueSession = false
         let request = DaemonClient.TaskRequest(
             id: UUID().uuidString,
             mode: mode,
@@ -448,6 +589,7 @@ final class AppState {
                     self.resultText = LatexSanitize.forCopy(self.resultText)
                 }
                 self.isStreaming = false
+                self.canContinueSession = true
                 self.status = self.daemonConnected ? "已连接 \(self.modelName)" : "完成"
                 if recordHistory, !self.resultText.isEmpty {
                     let entry = HistoryEntry(

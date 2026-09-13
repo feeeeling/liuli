@@ -119,3 +119,14 @@ struct HistoryEntry: Codable, Identifiable, Sendable {
     var result: String
     var targetLang: String
 }
+
+struct FollowUpMessage: Identifiable, Equatable, Sendable {
+    enum Role: String, Sendable {
+        case user
+        case assistant
+    }
+
+    var id: String
+    var role: Role
+    var text: String
+}
