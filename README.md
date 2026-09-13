@@ -1,8 +1,12 @@
 # 琉璃 Liuli
 
+<p align="center"><img src="docs/assets/icon.png" width="128" alt="琉璃"></p>
+
 macOS 全局翻译面板，交互接近 [Bob](https://github.com/ripperhe/Bob)：快捷键唤起液态玻璃悬浮窗，选中文字即时翻译，截图 OCR / 图译，公式转 LaTeX。
 
 底层是随 App 启停的 [Pi Agent](https://github.com/earendil-works/pi) 守护进程。凭证写在 `~/.pi/agent/auth.json`，和终端 `pi` 共用。
+
+面板在 **macOS 26（Tahoe）+** 使用系统液态玻璃（`NSGlassEffectView`）；**macOS 15–25** 自动降级为 `NSVisualEffectView` 磨砂玻璃。最低系统 15.0。本机调试降级可设 `LIULI_FORCE_FROSTED=1`。
 
 ```
 选中文字 / 截图 / 输入
@@ -80,6 +84,7 @@ make dev          # 打 debug .app 并打开，不要 swift run
 | `LIULI_PORT` | 守护进程端口，默认 `17891` |
 | `LIULI_HTTP_PROXY` | 覆盖自动探测的代理 |
 | `LIULI_MODEL` | 指定模型，如 `xai/grok-4.6` |
+| `LIULI_FORCE_FROSTED` | `1` 时强制磨砂玻璃（在 Tahoe 上预览 15–25 降级） |
 
 菜单栏 App 不继承终端 `HTTP_PROXY`；守护进程会探测 Clash 混合端口（7890 等）和系统代理。
 

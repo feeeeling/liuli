@@ -18,6 +18,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/daemon"
 cp "$BIN" "$APP/Contents/MacOS/Liuli"
 cp "$ROOT/app/Resources/Info.plist" "$APP/Contents/Info.plist"
 echo -n 'APPL????' >"$APP/Contents/PkgInfo"
+"$ROOT/scripts/embed-icons.sh" "$APP"
 
 if [[ ! -d "$ROOT/daemon/node_modules" ]]; then
   (cd "$ROOT/daemon" && npm install)

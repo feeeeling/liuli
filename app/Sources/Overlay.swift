@@ -3,53 +3,6 @@ import QuartzCore
 import SwiftUI
 
 @MainActor
-enum GlassChrome {
-    static func wrap(_ content: NSView, cornerRadius: CGFloat = 16) -> NSView {
-        if #available(macOS 26.0, *) {
-            let glass = NSGlassEffectView()
-            glass.cornerRadius = cornerRadius
-            glass.style = .regular
-            glass.tintColor = NSColor(name: nil) { appearance in
-                let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                return NSColor.black.withAlphaComponent(dark ? 0.32 : 0.10)
-            }
-            glass.contentView = content
-            glass.focusRingType = .none
-            glass.wantsLayer = true
-            glass.layer?.borderWidth = 0
-            glass.layer?.borderColor = CGColor.clear
-            content.focusRingType = .none
-            content.translatesAutoresizingMaskIntoConstraints = false
-            if let container = glass.contentView ?? content.superview {
-                NSLayoutConstraint.activate([
-                    content.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-                    content.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-                    content.topAnchor.constraint(equalTo: container.topAnchor),
-                    content.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-                ])
-            }
-            return glass
-        }
-        let effect = NSVisualEffectView()
-        effect.material = .hudWindow
-        effect.blendingMode = .behindWindow
-        effect.state = .active
-        effect.wantsLayer = true
-        effect.layer?.cornerRadius = cornerRadius
-        effect.layer?.masksToBounds = true
-        content.translatesAutoresizingMaskIntoConstraints = false
-        effect.addSubview(content)
-        NSLayoutConstraint.activate([
-            content.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
-            content.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
-            content.topAnchor.constraint(equalTo: effect.topAnchor),
-            content.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
-        ])
-        return effect
-    }
-}
-
-@MainActor
 final class OverlayPanelController {
     private let state: AppState
     private var panel: OverlayPanel?

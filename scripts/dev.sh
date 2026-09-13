@@ -26,6 +26,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Liuli"
 cp "$ROOT/app/Resources/Info.plist" "$APP/Contents/Info.plist"
 echo -n 'APPL????' >"$APP/Contents/PkgInfo"
+"$ROOT/scripts/embed-icons.sh" "$APP"
 ln -sfn "$ROOT/daemon" "$APP/Contents/Resources/daemon"
 
 IDENTITY="$("$ROOT/scripts/ensure-signing-identity.sh")"
@@ -39,5 +40,10 @@ fi
 pkill -f "$APP/Contents/MacOS/Liuli" 2>/dev/null || true
 sleep 0.3
 echo "Opening $APP"
-open "$APP"
+if [[ "${LIULI_FORCE_FROSTED:-}" == "1" ]]; then
+  echo "LIULI_FORCE_FROSTED=1 — using frosted NSVisualEffectView"
+  open --env LIULI_FORCE_FROSTED=1 "$APP"
+else
+  open "$APP"
+fi
 echo "菜单栏应出现「琉璃」。授权一次即可；不要删掉 dist/Liuli.app。"

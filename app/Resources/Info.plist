@@ -8,6 +8,8 @@
 	<string>琉璃</string>
 	<key>CFBundleExecutable</key>
 	<string>Liuli</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>app.liuli.desktop</string>
 	<key>CFBundleInfoDictionaryVersion</key>
