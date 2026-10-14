@@ -113,6 +113,20 @@ private struct ModelsSettingsTab: View {
     var body: some View {
         Form {
             Section("当前模型") {
+                HStack {
+                    Button("刷新模型列表") {
+                        Task { await state.refreshCatalog() }
+                    }
+                    .disabled(state.isRefreshingModels)
+                    if state.isRefreshingModels {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+                if !state.modelCatalogMessage.isEmpty {
+                    Text(state.modelCatalogMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if state.models.isEmpty {
                     Text("先到「账号」登录一个供应商。")
                         .foregroundStyle(.secondary)

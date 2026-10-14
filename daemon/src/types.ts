@@ -53,6 +53,7 @@ export interface ModelInfo {
 
 export interface ModelsResponse {
   current?: string;
+  warning?: string;
   models: ModelInfo[];
 }
 

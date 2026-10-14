@@ -21,6 +21,8 @@ final class AppState {
     var enhanceSilentOCR = true
     var providers: [ProviderInfo] = []
     var models: [ModelInfo] = []
+    var isRefreshingModels = false
+    var modelCatalogMessage = ""
     var selectedModelID = ""
     var history: [HistoryEntry] = []
     var loginPrompt: LoginPrompt?
@@ -250,12 +252,19 @@ final class AppState {
     }
 
     func refreshCatalog() async {
+        guard !isRefreshingModels else { return }
+        isRefreshingModels = true
+        defer { isRefreshingModels = false }
         providers = (try? await DaemonClient.shared.providers()) ?? providers
-        if let catalog = try? await DaemonClient.shared.models() {
+        do {
+            let catalog = try await DaemonClient.shared.models()
             models = catalog.models
+            modelCatalogMessage = catalog.warning ?? "模型列表已更新"
             if selectedModelID.isEmpty, let current = catalog.current {
                 selectedModelID = current
             }
+        } catch {
+            modelCatalogMessage = "模型列表刷新失败：\(error.localizedDescription)"
         }
         if !selectedModelID.isEmpty {
             persist()

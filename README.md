@@ -58,6 +58,8 @@ make daemon-install && make app && make install
 
 然后在 **设置 → 账号** 登录模型供应商（ChatGPT 订阅用 OpenAI Codex；API Key 用对应供应商），或终端执行 `pi login`。安装脚本若未检测到 `pi`，会接着安装 Pi CLI。
 
+启动应用、打开模型设置或点击「刷新模型列表」时，会通过 Pi 的在线目录获取已配置供应商的最新模型，无需升级应用来添加新模型。网络失败时保留本地列表并显示提示；`PI_OFFLINE` 模式只使用本地目录。
+
 | 快捷键 | 作用 |
 | --- | --- |
 | ⌥D | 划词翻译 |

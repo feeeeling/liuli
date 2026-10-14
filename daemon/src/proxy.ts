@@ -35,7 +35,7 @@ function installDispatcher(): void {
   );
   // OpenAI SDK uses global fetch. Node's builtin fetch has a separate undici
   // copy, so the dispatcher only applies if we install the same implementation.
-  globalThis.fetch = undiciFetch as typeof fetch;
+  globalThis.fetch = undiciFetch as unknown as typeof fetch;
 }
 
 function canConnect(host: string, port: number, timeoutMs = 250): Promise<boolean> {

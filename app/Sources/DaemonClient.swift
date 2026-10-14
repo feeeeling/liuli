@@ -14,6 +14,7 @@ struct ProvidersResponse: Decodable {
 
 struct ModelsResponse: Decodable {
     var current: String?
+    var warning: String?
     var models: [ModelInfo]
 }
 
@@ -104,7 +105,7 @@ actor DaemonClient {
 
     func models() async throws -> ModelsResponse {
         var request = URLRequest(url: baseURL.appending(path: "/v1/models"))
-        request.timeoutInterval = 8
+        request.timeoutInterval = 20
         applyAuth(&request)
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {

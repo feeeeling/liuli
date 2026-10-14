@@ -12,6 +12,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { LiveModelCatalog } from "./model-catalog.ts";
 import { buildContinuePrompt, buildUserPrompt, SYSTEM_PROMPT } from "./prompts.ts";
 import { createWikiTools } from "./wiki.ts";
 import type {
@@ -40,15 +41,9 @@ type AuthEvent = {
   message?: string;
   userCode?: string;
   verificationUri?: string;
-  links?: { url: string; label?: string }[];
+  links?: readonly { url: string; label?: string }[];
 };
-type AuthPrompt = {
-  type: LoginPromptPayload["type"];
-  message: string;
-  placeholder?: string;
-  options?: { id: string; label: string; description?: string }[];
-  signal?: AbortSignal;
-};
+type AuthPrompt = Parameters<Parameters<ModelRuntime["login"]>[2]["prompt"]>[0];
 
 const HOME_DIR = path.join(os.homedir(), ".liuli");
 
@@ -112,6 +107,7 @@ function pickModel(
 
 export class LiuliAgent {
   private runtime: ModelRuntime | undefined;
+  private catalog: LiveModelCatalog | undefined;
   private session: AgentSession | undefined;
   private model: RuntimeModel | undefined;
   private preferredModel: string | undefined;
@@ -128,6 +124,7 @@ export class LiuliAgent {
   async start(): Promise<HealthResponse> {
     ensureHome();
     this.runtime = await ModelRuntime.create();
+    this.catalog = new LiveModelCatalog(this.runtime);
     const available = await this.runtime.getAvailable();
     this.model = pickModel(available, this.preferredModel, true);
     if (this.model) {
@@ -196,8 +193,10 @@ export class LiuliAgent {
 
   async listModels(): Promise<ModelsResponse> {
     if (!this.runtime) return { models: [] };
+    const warning = await this.catalog?.refresh();
     const available = await this.runtime.getAvailable();
     return {
+      warning,
       current: this.model ? modelKey(this.model) : undefined,
       models: available.map((m) => ({
         id: m.id,
@@ -264,7 +263,7 @@ export class LiuliAgent {
             id,
             type: prompt.type,
             message: prompt.message,
-            placeholder: prompt.placeholder,
+            placeholder: "placeholder" in prompt ? prompt.placeholder : undefined,
             options:
               prompt.type === "select"
                 ? [...prompt.options]
