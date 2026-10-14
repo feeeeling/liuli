@@ -2,6 +2,12 @@
 set -euo pipefail
 NAME="Liuli Developer"
 
+# Headless runners cannot answer login-keychain prompts. Use ad-hoc signing there.
+if [[ "${CI:-}" == "true" ]]; then
+  echo "-"
+  exit 0
+fi
+
 if security find-identity -v -p codesigning 2>/dev/null | grep -F -q "$NAME"; then
   echo "$NAME"
   exit 0
