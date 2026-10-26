@@ -7,7 +7,8 @@
             <TextBlock Text="琉璃" Style="{StaticResource TitleTextBlockStyle}" />
             <TextBlock Text="Windows 预览版 · 输入翻译" Opacity="0.65" />
             <InfoBar x:Name="Status" IsOpen="True" IsClosable="False" Severity="Informational" Title="正在启动模型服务…" />
-            <StackPanel x:Name="Workspace" Spacing="16" IsEnabled="False">
+            <ContentControl x:Name="Workspace" IsEnabled="False" HorizontalContentAlignment="Stretch">
+              <StackPanel Spacing="16">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ComboBox x:Name="Models" Header="模型" DisplayMemberPath="DisplayName" MinWidth="320" MaxWidth="600" SelectionChanged="ModelChanged" />
                     <Button x:Name="RefreshButton" Content="刷新" VerticalAlignment="Bottom" Click="RefreshClicked" />
@@ -39,7 +40,8 @@
                         <HyperlinkButton x:Name="LoginLink" Content="打开登录页面" Visibility="Collapsed" Click="LoginLinkClicked" />
                     </StackPanel>
                 </Expander>
-            </StackPanel>
+              </StackPanel>
+            </ContentControl>
             <Button x:Name="RestartButton" Content="重启模型服务" Click="RestartClicked" />
             <TextBlock x:Name="LogLocation" TextWrapping="Wrap" IsTextSelectionEnabled="True" Opacity="0.6" FontSize="12" />
         </StackPanel>

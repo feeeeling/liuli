@@ -42,7 +42,7 @@ public sealed partial class MainWindow : Window
         Status.Severity = severity;
     }
 
-    private void SetBusy(bool value)
+    private void SetBusy(bool value, bool cancellable = false)
     {
         busy = value;
         TranslateButton.IsEnabled = !value;
@@ -53,13 +53,13 @@ public sealed partial class MainWindow : Window
         Providers.IsEnabled = !value;
         AuthType.IsEnabled = !value;
         RestartButton.IsEnabled = !value;
-        CancelButton.IsEnabled = value;
+        CancelButton.IsEnabled = value && cancellable;
     }
 
     private async Task StartAsync()
     {
         Workspace.IsEnabled = false;
-        RestartButton.IsEnabled = false;
+        SetBusy(true);
         ShowStatus("正在启动模型服务…");
         try
         {
@@ -71,7 +71,7 @@ public sealed partial class MainWindow : Window
         }
         catch (OperationCanceledException) { ShowStatus("模型服务启动超时或已取消。", InfoBarSeverity.Warning); }
         catch (Exception ex) { ShowStatus(ex.Message, InfoBarSeverity.Error); }
-        finally { if (!closing) RestartButton.IsEnabled = true; }
+        finally { if (!closing) SetBusy(false); }
     }
 
     private async Task RefreshAsync()
@@ -121,7 +121,7 @@ public sealed partial class MainWindow : Window
     {
         if (busy || string.IsNullOrWhiteSpace(Source.Text)) return;
         Result.Text = "";
-        SetBusy(true);
+        SetBusy(true, cancellable: true);
         operation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         operation.CancelAfter(TimeSpan.FromMinutes(5));
         try
@@ -156,7 +156,7 @@ public sealed partial class MainWindow : Window
         LoginMessage.Text = "";
         LoginLink.Visibility = Visibility.Collapsed;
         loginUri = null;
-        SetBusy(true);
+        SetBusy(true, cancellable: true);
         operation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         operation.CancelAfter(TimeSpan.FromMinutes(10));
         try
@@ -234,7 +234,9 @@ public sealed partial class MainWindow : Window
     private async void RestartClicked(object sender, RoutedEventArgs e)
     {
         if (busy) return;
-        await host.DisposeAsync();
-        await StartAsync();
+        SetBusy(true);
+        try { await host.DisposeAsync(); await StartAsync(); }
+        catch (Exception ex) { ShowStatus(ex.Message, InfoBarSeverity.Error); }
+        finally { if (!closing) SetBusy(false); }
     }
 }
