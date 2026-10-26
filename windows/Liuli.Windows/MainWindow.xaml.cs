@@ -22,7 +22,13 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         Title = "琉璃 Liuli · Windows Preview";
-        AppWindow.Resize(new global::Windows.Graphics.SizeInt32(860, 900));
+        var workArea = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(AppWindow.Id,
+            Microsoft.UI.Windowing.DisplayAreaFallback.Primary).WorkArea;
+        var width = Math.Min(860, workArea.Width);
+        var height = Math.Min(900, workArea.Height);
+        AppWindow.MoveAndResize(new global::Windows.Graphics.RectInt32(
+            workArea.X + (workArea.Width - width) / 2,
+            workArea.Y + (workArea.Height - height) / 2, width, height));
         SystemBackdrop = new DesktopAcrylicBackdrop();
         LogLocation.Text = $"服务日志：{host.LogPath}";
         Root.Loaded += async (_, _) => await StartAsync();
