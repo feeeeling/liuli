@@ -48,6 +48,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build WinUI and unsigned MSIX
         run: ./windows/scripts/build.ps1 -SkipPrepare
+      - name: Verify MSIX payload and packaged daemon startup
+        run: ./windows/scripts/verify-package.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: Liuli-windows-x64-preview

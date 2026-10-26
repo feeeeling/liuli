@@ -39,7 +39,7 @@ dotnet run --project windows/Liuli.Core.Tests -c Release -- (Get-Command node.ex
 
 `Liuli.Core.Tests` 是无额外测试框架依赖的控制台契约测试，失败会返回非零退出码。它验证 SSE（多行、中文、CRLF、EOF、错误和中断）、HTTP 认证与字段、登录事件和回答、取消、子进程清理，并启动实际生产 bundle，验证无账号时仍可连接；Windows CI 还会强制终止一个测试宿主，验证 Job Object 清理其 daemon。测试覆盖真实 TCP 与子进程，不调用付费模型。测试使用隔离 HOME / USERPROFILE / PI_CODING_AGENT_DIR，不读取开发者的模型凭证。
 
-核心库和契约测试可在安装 .NET 8 与 Node 的 macOS/Linux 上运行；WinUI、Windows Job Object 和 MSIX 需要 Windows。GitHub Actions 在 Windows Server 2022 x64 上执行上述测试并构建 MSIX，它不代替 Windows 10/11 桌面交互验证。
+核心库和契约测试可在安装 .NET 8 与 Node 的 macOS/Linux 上运行；WinUI、Windows Job Object 和 MSIX 需要 Windows。GitHub Actions 在 Windows Server 2022 x64 上执行上述测试并构建 MSIX，构建后还使用 MakeAppx 解包 MSIX，检查运行目录布局，并从实际包内再次运行 daemon 契约测试。它不代替 Windows 10/11 桌面交互验证。
 
 ## 生命周期和配置
 
