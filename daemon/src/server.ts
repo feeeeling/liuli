@@ -1,5 +1,5 @@
 import http from "node:http";
-import { LiuliAgent } from "./agent.ts";
+import type { LiuliAgent } from "./agent.ts";
 import { isAuthKind, parseTask } from "./types.ts";
 
 const DEFAULT_PORT = 17891;
@@ -61,7 +61,12 @@ function parseJsonObject(raw: string): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
-export function startServer(agent: LiuliAgent): http.Server {
+export type DaemonAgent = Pick<LiuliAgent,
+  "health" | "listProviders" | "listModels" | "setModel" | "logout" |
+  "answerPrompt" | "cancelLogin" | "login" | "run" | "abort"
+>;
+
+export function startServer(agent: DaemonAgent): http.Server {
   const port = Number(process.env.LIULI_PORT || DEFAULT_PORT);
 
   const server = http.createServer(async (req, res) => {
@@ -205,10 +210,12 @@ export function startServer(agent: LiuliAgent): http.Server {
           "X-Accel-Buffering": "no",
         });
 
+        res.flushHeaders();
+        res.socket?.setNoDelay(true);
         const close = () => {
           void agent.abort();
         };
-        req.on("close", close);
+        res.on("close", close);
 
         try {
           const text = await agent.run(task, {
@@ -220,7 +227,7 @@ export function startServer(agent: LiuliAgent): http.Server {
             message: error instanceof Error ? error.message : String(error),
           });
         } finally {
-          req.off("close", close);
+          res.off("close", close);
           res.end();
         }
         return;
@@ -241,7 +248,7 @@ export function startServer(agent: LiuliAgent): http.Server {
   server.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code === "EADDRINUSE") {
       console.error(
-        `[liuli] ${HOST}:${port} 已被占用。先停掉旧进程：lsof -iTCP:${port} -sTCP:LISTEN`,
+        `[liuli] ${HOST}:${port} 已被占用。请停止旧实例或设置 LIULI_PORT。`,
       );
       process.exit(1);
     }
@@ -250,8 +257,13 @@ export function startServer(agent: LiuliAgent): http.Server {
   });
 
   server.listen(port, HOST, () => {
+    const address = server.address();
+    if (address && typeof address !== "string") {
+      // Native clients can request port 0 and discover the OS-assigned port.
+      console.log(`[liuli:ready] ${JSON.stringify({ port: address.port, protocol: 1 })}`);
+    }
     const health = agent.health();
-    console.log(`[liuli] http://${HOST}:${port}`);
+    console.log(`[liuli] http://${HOST}:${address && typeof address !== "string" ? address.port : port}`);
     if (health.ok) {
       console.log(
         `[liuli] model ${health.provider}/${health.model} vision=${health.vision}`,

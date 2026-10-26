@@ -1,0 +1,56 @@
+name: Windows preview
+
+on:
+  push:
+    branches: [main, 'codex/**']
+    paths: ['windows/**', 'daemon/**', '.github/workflows/windows.yml']
+  pull_request:
+    paths: ['windows/**', 'daemon/**', '.github/workflows/windows.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-x64:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: daemon/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: microsoft/setup-msbuild@v2
+      - name: Prepare bundled daemon and Node
+        run: ./windows/scripts/prepare-daemon.ps1
+      - name: Check daemon types and tests
+        working-directory: daemon
+        run: |
+          npm run typecheck
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test native client protocol and bundled daemon lifecycle
+        run: |
+          dotnet run --project windows/Liuli.Core.Tests -c Release -- "$pwd/dist/windows-payload/runtime/node.exe" "$pwd/dist/windows-payload/daemon/index.mjs" "$pwd/daemon/src/windows-fixture.ts"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build WinUI and unsigned MSIX
+        run: ./windows/scripts/build.ps1 -SkipPrepare
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Liuli-windows-x64-preview
+          path: dist/windows-packages/**
+          if-no-files-found: error
+          retention-days: 14
