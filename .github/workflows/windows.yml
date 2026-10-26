@@ -50,9 +50,17 @@ jobs:
         run: ./windows/scripts/build.ps1 -SkipPrepare
       - name: Verify MSIX payload and packaged daemon startup
         run: ./windows/scripts/verify-package.ps1
+      - name: Build self-contained development folder
+        run: ./windows/scripts/build-dev.ps1 -SkipPrepare
       - uses: actions/upload-artifact@v4
         with:
           name: Liuli-windows-x64-preview
           path: dist/windows-packages/**
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Liuli-windows-x64-dev
+          path: dist/windows-dev/**
           if-no-files-found: error
           retention-days: 14

@@ -25,6 +25,15 @@ msbuild windows/Liuli.Windows/Liuli.Windows.csproj /restore /p:Configuration=Deb
 
 产物在 `dist/windows-packages/`。CI 的未签名 MSIX 用于检查打包和留存预览产物，不能直接双击安装。开发部署使用 VS；分发安装前须配置与 manifest Publisher 一致且受目标系统信任的签名证书。不要提交证书或私钥。当前阶段不自动发布 Release，不导入信任证书，不变更系统安全设置。
 
+## 无包身份的开发验证目录
+
+```powershell
+./windows/scripts/build-dev.ps1
+./dist/windows-dev/Liuli.Windows.exe
+```
+
+CI 同时上传 `Liuli-windows-x64-dev`，解压后可运行，不需要预装 .NET、Node 或 Windows App SDK。它仅用于当前阶段的界面与 daemon 验证；没有 MSIX 包身份，不能作为后续系统 OCR 等功能的验收环境。正式分发仍使用签名 MSIX。
+
 ## 测试
 
 ```powershell
