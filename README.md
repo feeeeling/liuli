@@ -73,6 +73,10 @@ make daemon-install && make app && make install
 
 快捷键可在设置里改。与 Bob 同时开着会冲突。
 
+## Windows 支持（开发中）
+
+Windows 10 22H2 / Windows 11 x64 原生客户端正在开发，复用现有 Pi daemon。当前工程包含输入翻译、账号和模型入口、进程管理、MSIX 与 Windows CI；尚未达到 macOS 功能对齐。开发与构建见 [Windows 开发说明](windows/README.md)。
+
 ## 开发
 
 ```bash

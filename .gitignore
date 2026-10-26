@@ -15,3 +15,9 @@ runtime/
 *.xcuserstate
 .idea/
 Liuli-macos-arm64.zip
+**/bin/
+**/obj/
+**/AppPackages/
+.vs/
+*.pfx
+*.cer
