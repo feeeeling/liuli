@@ -24,6 +24,12 @@ try {
 if (Test-Path $payload) { Remove-Item $payload -Recurse -Force }
 New-Item "$payload/runtime", "$payload/daemon" -ItemType Directory -Force | Out-Null
 Copy-Item $nodePath "$payload/runtime/node.exe"
+$nodeLicense = Join-Path (Split-Path $nodePath) 'LICENSE'
+if (Test-Path $nodeLicense) {
+    Copy-Item $nodeLicense "$payload/runtime/LICENSE.node.txt"
+} else {
+    Invoke-WebRequest "https://raw.githubusercontent.com/nodejs/node/v$nodeVersion/LICENSE" -OutFile "$payload/runtime/LICENSE.node.txt"
+}
 Copy-Item "$daemon/dist/index.mjs", "$daemon/package.json", "$daemon/package-lock.json" "$payload/daemon/"
 Push-Location "$payload/daemon"
 try {

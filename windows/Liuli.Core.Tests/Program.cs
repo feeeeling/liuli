@@ -14,6 +14,16 @@ static async Task ThrowsAsync<T>(Func<Task> action) where T : Exception
     throw new Exception($"Expected {typeof(T).Name}");
 }
 
+// The parent test kills only this process to prove Windows Job Object cleanup.
+if (args.Length == 4 && args[0] == "--crash-host")
+{
+    await using var childHost = new DaemonHost(args[3]);
+    await childHost.StartAsync(args[1], args[2], inheritEnvironment: false);
+    Console.WriteLine((await childHost.Client!.HealthAsync()).Model);
+    await Task.Delay(Timeout.InfiniteTimeSpan);
+    return;
+}
+
 // No test package dependencies: this executable fails CI with a nonzero exit code.
 await using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(": heartbeat\r\nevent: delta\r\ndata: {\r\ndata: \"text\":\"中文\"}\r\n\r\nevent: done\ndata: {}")))
 {
@@ -68,6 +78,32 @@ try
     try { using var child = Process.GetProcessById(pid); Check(child.HasExited, "Daemon survived host disposal."); }
     catch (ArgumentException) { }
     Console.WriteLine("PASS: real HTTP/SSE client, interactive login, cancellation, owned child cleanup");
+
+    if (OperatingSystem.IsWindows())
+    {
+        var info = new ProcessStartInfo(Environment.ProcessPath!)
+        {
+            UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true
+        };
+        if (Path.GetFileNameWithoutExtension(Environment.ProcessPath!).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+            info.ArgumentList.Add(System.Reflection.Assembly.GetExecutingAssembly().Location);
+        foreach (var arg in new[] { "--crash-host", Path.GetFullPath(args[0]), Path.GetFullPath(args[2]), Path.Combine(temp, "crash-logs") })
+            info.ArgumentList.Add(arg);
+        using var parent = Process.Start(info)!;
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        try
+        {
+            var line = await parent.StandardOutput.ReadLineAsync(deadline.Token);
+            var daemonPid = int.Parse(line!);
+            using var daemon = Process.GetProcessById(daemonPid);
+            parent.Kill(entireProcessTree: false);
+            await parent.WaitForExitAsync(deadline.Token);
+            try { await daemon.WaitForExitAsync(deadline.Token); }
+            catch { if (!daemon.HasExited) daemon.Kill(); throw; }
+            Console.WriteLine("PASS: Windows Job Object cleans up daemon after host crash");
+        }
+        finally { if (!parent.HasExited) parent.Kill(entireProcessTree: true); }
+    }
 
     // Launch the actual production bundle with no accounts. Initialization must not require a model or Pi CLI.
     await using (var production = new DaemonHost(Path.Combine(temp, "production-logs")))
