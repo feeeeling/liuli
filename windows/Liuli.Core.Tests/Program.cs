@@ -41,7 +41,7 @@ try
     int pid;
     await using (var host = new DaemonHost(Path.Combine(temp, "logs")))
     {
-        await host.StartAsync(Path.GetFullPath(args[0]), Path.GetFullPath(args[2]), environment);
+        await host.StartAsync(Path.GetFullPath(args[0]), Path.GetFullPath(args[2]), environment, inheritEnvironment: false);
         var client = host.Client!;
         var health = await client.HealthAsync();
         pid = int.Parse(health.Model!);
@@ -72,7 +72,7 @@ try
     // Launch the actual production bundle with no accounts. Initialization must not require a model or Pi CLI.
     await using (var production = new DaemonHost(Path.Combine(temp, "production-logs")))
     {
-        await production.StartAsync(Path.GetFullPath(args[0]), Path.GetFullPath(args[1]), environment);
+        await production.StartAsync(Path.GetFullPath(args[0]), Path.GetFullPath(args[1]), environment, inheritEnvironment: false);
         var health = await production.Client!.HealthAsync();
         Check(!health.Ok, "Isolated production daemon should have no configured credentials.");
         Check((await production.Client.ProvidersAsync()).Providers.Length > 0, "Production SDK providers unavailable.");

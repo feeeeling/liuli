@@ -20,13 +20,13 @@ public sealed class DaemonHost : IAsyncDisposable
     }
 
     public async Task StartAsync(string nodePath, string daemonEntry,
-        IReadOnlyDictionary<string, string>? environment = null, CancellationToken ct = default)
+        IReadOnlyDictionary<string, string>? environment = null, bool inheritEnvironment = true, CancellationToken ct = default)
     {
         await lifecycle.WaitAsync(ct);
         try
         {
             if (process is { HasExited: false } && Client is not null) return;
-            Stop();
+            await StopAsync();
             if (!File.Exists(nodePath) || !File.Exists(daemonEntry))
                 throw new FileNotFoundException("未找到随应用分发的 Node 或 daemon，请重新构建 Windows 运行目录。");
             var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
@@ -39,6 +39,14 @@ public sealed class DaemonHost : IAsyncDisposable
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            if (!inheritEnvironment)
+            {
+                var system = new Dictionary<string, string>();
+                foreach (var key in new[] { "SystemRoot", "WINDIR", "TEMP", "TMP", "PATH", "PATHEXT" })
+                    if (Environment.GetEnvironmentVariable(key) is { } value) system[key] = value;
+                info.Environment.Clear();
+                foreach (var (key, value) in system) info.Environment[key] = value;
+            }
             info.ArgumentList.Add(daemonEntry);
             if (environment is not null)
                 foreach (var (key, value) in environment) info.Environment[key] = value;
@@ -88,13 +96,13 @@ public sealed class DaemonHost : IAsyncDisposable
         }
         catch
         {
-            Stop();
+            await StopAsync();
             throw;
         }
         finally { lifecycle.Release(); }
     }
 
-    private void Stop()
+    private async Task StopAsync()
     {
         Client?.Dispose();
         Client = null;
@@ -104,6 +112,10 @@ public sealed class DaemonHost : IAsyncDisposable
         {
             try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
             catch (InvalidOperationException) { }
+            using var exitTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try { await process.WaitForExitAsync(exitTimeout.Token); }
+            catch (OperationCanceledException) { }
+            catch (InvalidOperationException) { }
             process.Dispose();
             process = null;
         }
@@ -112,7 +124,7 @@ public sealed class DaemonHost : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await lifecycle.WaitAsync();
-        try { Stop(); }
+        try { await StopAsync(); }
         finally { lifecycle.Release(); }
     }
 }

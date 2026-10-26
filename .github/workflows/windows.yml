@@ -2,7 +2,7 @@ name: Windows preview
 
 on:
   push:
-    branches: [main, 'codex/**']
+    branches: [main]
     paths: ['windows/**', 'daemon/**', '.github/workflows/windows.yml']
   pull_request:
     paths: ['windows/**', 'daemon/**', '.github/workflows/windows.yml']
