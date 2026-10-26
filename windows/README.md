@@ -32,7 +32,7 @@ msbuild windows/Liuli.Windows/Liuli.Windows.csproj /restore /p:Configuration=Deb
 ./dist/windows-dev/Liuli.Windows.exe
 ```
 
-CI 同时上传 `Liuli-windows-x64-dev`，解压后可运行，不需要预装 .NET、Node 或 Windows App SDK。它仅用于当前阶段的界面与 daemon 验证；没有 MSIX 包身份，不能作为后续系统 OCR 等功能的验收环境。正式分发仍使用签名 MSIX。
+CI 同时上传 `Liuli-windows-x64-dev`，解压后可运行，不需要预装 .NET、Node 或 Windows App SDK。上传必须保留 SDK 的隐藏数据文件（如 `.manifest.json`）；CI 会重新下载该产物并再次运行 daemon 契约测试，检查交付内容。它仅用于当前阶段的界面与 daemon 验证；没有 MSIX 包身份，不能作为后续系统 OCR 等功能的验收环境。正式分发仍使用签名 MSIX。
 
 ## 测试
 

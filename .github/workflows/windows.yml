@@ -62,5 +62,15 @@ jobs:
         with:
           name: Liuli-windows-x64-dev
           path: dist/windows-dev/**
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
+      - name: Download development artifact for delivery verification
+        uses: actions/download-artifact@v4
+        with:
+          name: Liuli-windows-x64-dev
+          path: dist/windows-dev-roundtrip
+      - name: Test daemon from downloaded development artifact
+        run: |
+          dotnet run --project windows/Liuli.Core.Tests -c Release -- "$pwd/dist/windows-dev-roundtrip/runtime/node.exe" "$pwd/dist/windows-dev-roundtrip/daemon/index.mjs" "$pwd/daemon/src/windows-fixture.ts"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
