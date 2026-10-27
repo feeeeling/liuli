@@ -31,8 +31,12 @@ textarea::placeholder { color: var(--tertiary); }
 #image-preview { max-height: 72px; max-width: 85%; border-radius: 10px; border: 1px solid var(--line); object-fit: contain; }
 .result-section { display: flex; flex-direction: column; min-height: 0; border-top: 1px solid var(--line); padding-top: 12px; gap: 6px; }
 #result { flex: 1 1 auto; min-height: 0; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.65; user-select: text; }
-#result:empty::before { content: "▍"; color: var(--secondary); font-size: 13px; }
-.running #result:empty::before { animation: breathe 1.3s ease-in-out infinite; }
+.streaming-response:empty::before { content: "▍"; color: var(--secondary); font-size: 13px; animation: breathe 1.3s ease-in-out infinite; }
+#conversation { display: flex; flex-direction: column; gap: 14px; padding-top: 14px; }
+.chat-message { border-top: 1px solid var(--line); padding-top: 10px; }
+.chat-label { font-size: 10px; color: var(--secondary); margin-bottom: 4px; }
+.chat-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.65; }
+.chat-message.user { border: 0; border-radius: 8px; padding: 8px 10px; background: var(--subtle); }
 .result-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .expand-button { width: 22px; height: 22px; border-radius: 6px; font-size: 20px; line-height: 1; }
 #followup-form { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: var(--subtle); flex-shrink: 0; }
@@ -61,10 +65,10 @@ footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px
 @keyframes breathe { 50% { opacity: .25; } }
 #formula-preview { max-height: 160px; overflow: auto; min-height: 38px; padding: 10px 6px; border-radius: 8px; background: var(--subtle); flex-shrink: 0; font-size: 16px; }
 #formula-preview .katex-display { margin: 0; }
-.latex-view #result { font: 12px/1.6 Consolas, monospace; }
+.latex-view #primary-result { font: 12px/1.6 Consolas, monospace; }
 #formula-hint { font-size: 11px; margin: 0; }
 .source-section.image-only #source { display: none; }
-.latex-view #result { min-height: 38px; max-height: 100px; }
+.latex-view:not(.conversation-open) #result { min-height: 38px; max-height: 100px; }
 .captured-view.latex-view .source-section, .captured-view.ocr-view .source-section { display: none; }
 
 .model-picker option, .model-picker optgroup { background: var(--settings); color: var(--text); }

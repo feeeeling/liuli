@@ -12,12 +12,22 @@ function constrain(bounds, area) {
     y: clamp(bounds.y, area.y + 12, area.y + area.height - height - 12), width, height };
 }
 function fromEdge(start, edge, delta, area) {
-  const width = start.width + (edge.includes("e") ? delta.x : edge.includes("w") ? -delta.x : 0);
-  const height = start.height + (edge.includes("s") ? delta.y : edge.includes("n") ? -delta.y : 0);
-  const size = constrain({ ...start, width, height }, area);
-  return constrain({ ...size,
-    x: edge.includes("w") ? start.x + start.width - size.width : start.x,
-    y: edge.includes("n") ? start.y + start.height - size.height : start.y,
-  }, area);
+  const next = { ...start };
+  const right = start.x + start.width, bottom = start.y + start.height;
+  // Limit only the edge being dragged. Repositioning the whole rectangle here
+  // makes the opposite edge jump when the cursor reaches a screen boundary.
+  if (edge.includes("e") || edge.includes("w")) {
+    const west = edge.includes("w");
+    const maximum = Math.min(1000, west ? right - area.x - 12 : area.x + area.width - 12 - start.x);
+    next.width = clamp(start.width + (west ? -delta.x : delta.x), 360, maximum);
+    if (west) next.x = right - next.width;
+  }
+  if (edge.includes("n") || edge.includes("s")) {
+    const north = edge.includes("n");
+    const maximum = north ? bottom - area.y - 12 : area.y + area.height - 12 - start.y;
+    next.height = clamp(start.height + (north ? -delta.y : delta.y), 140, maximum);
+    if (north) next.y = bottom - next.height;
+  }
+  return next;
 }
 module.exports = { constrain, fromEdge, heightLimit };

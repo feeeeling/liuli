@@ -76,7 +76,7 @@ function appearance() {
     highContrast: nativeTheme.shouldUseHighContrastColors };
 }
 function applyPanelShape() {
-  if (!window || window.isDestroyed() || panelGesture) return;
+  if (!window || window.isDestroyed()) return;
   const { width, height } = window.getBounds();
   const key = `${width}:${height}:${screen.getDisplayMatching(window.getBounds()).scaleFactor}`;
   if (panelShapeKey === key) return;
@@ -140,13 +140,8 @@ function show(command) {
 }
 
 function setPanelSize(width, height) {
-  // Windows pins min/max to the current size when resizable is false.
-  // Lift that constraint only for this synchronous programmatic resize.
-  const visible = window.isVisible();
-  const wasResizable = window.isResizable();
-  if (!wasResizable) window.setResizable(true);
-  try { window.setSize(width, height); }
-  finally { if (!wasResizable) window.setResizable(false); applyPanelShape(); if (!visible) window.hide(); }
+  window.setSize(width, height);
+  applyPanelShape();
 }
 
 function fitPanel(area) {
@@ -172,12 +167,11 @@ function applyManualBounds(bounds, area, vertical = true) {
   const current = window.getBounds();
   if (!["x", "y", "width", "height"].some(key => current[key] !== next[key])) return;
   manualPanelSize = { width: next.width, height: vertical ? next.height : manualPanelSize?.height || 640 };
-  // A live gesture enables resizing once; position and size are one native update.
-  if (panelGesture) { panelGesture.changed = true; window.setBounds(next); }
+  // Keep the window style unchanged throughout the gesture. Toggling native
+  // resizability can change its non-client geometry before the first movement.
+  if (panelGesture) { panelGesture.changed = true; window.setBounds(next); applyPanelShape(); }
   else {
-    window.setResizable(true);
     window.setBounds(next);
-    window.setResizable(false);
     applyPanelShape();
     panelLayout({ maxHeight: heightLimit(manualPanelSize.height, area), userSized: true,
       liveResize: false, ...(vertical ? { heldHeight: next.height } : {}) });
@@ -524,12 +518,10 @@ function registerIPC() {
   handle("panel-resize-start", (edge, cursor) => {
     if (!["move", "n", "s", "e", "w", "ne", "nw", "se", "sw"].includes(edge)) throw new Error("Invalid resize edge");
     if (!cursor || ![cursor.x, cursor.y].every(value => Number.isFinite(value) && Math.abs(value) < 1e7)) return;
+    clearTimeout(panelMoveTimer);
     panelGesture = { edge, cursor, bounds: window.getBounds(),
       area: screen.getDisplayMatching(window.getBounds()).workArea };
     if (edge !== "move") {
-      window.setResizable(true);
-      window.setShape([]);
-      panelShapeKey = undefined;
       panelLayout({ maxHeight: heightLimit(manualPanelSize?.height, panelGesture.area), userSized: true, liveResize: true });
     }
   }, ["panel"]);
@@ -552,16 +544,14 @@ function registerIPC() {
     if (gesture) {
       if (gesture.edge === "move") {
         const area = screen.getDisplayMatching(window.getBounds()).workArea;
-        fitPanel(area);
         const b = window.getBounds(), next = constrain(b, area);
         if (next.x !== b.x || next.y !== b.y) window.setPosition(next.x, next.y);
         applyPanelShape();
         return;
       }
-      window.setResizable(false);
       applyPanelShape();
       if (gesture.changed) panelLayout({ maxHeight: heightLimit(manualPanelSize?.height, gesture.area), userSized: true,
-        liveResize: false, ...(/[ns]/.test(gesture.edge) ? { heldHeight: window.getBounds().height } : {}) });
+        liveResize: false, heldHeight: window.getBounds().height });
       else fitPanel(gesture.area);
     }
     return persistPanelSize();
@@ -838,7 +828,7 @@ else {
         thickFrame: false,
         hasShadow: false,
         roundedCorners: false,
-        resizable: false,
+        resizable: true,
         alwaysOnTop: true,
         skipTaskbar: true,
         backgroundColor: "#00000000",

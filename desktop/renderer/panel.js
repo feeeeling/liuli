@@ -19,6 +19,31 @@ let preferencesKey;
 let canContinueSession = false;
 let renderAsLatex = false;
 let activeRequestId;
+let responseElement = $("primary-result");
+function resetConversation() {
+  $("conversation").replaceChildren();
+  $("conversation").hidden = true;
+  followupOpen = false;
+  $("followup-form").hidden = true;
+  $("panel").classList.remove("conversation-open");
+  responseElement = $("primary-result");
+}
+function appendMessage(role, text = "", label = role === "user" ? "你" : "回答") {
+  const row = document.createElement("section");
+  row.className = `chat-message ${role}`;
+  row.dataset.role = role;
+  const heading = document.createElement("div");
+  heading.className = "chat-label"; heading.textContent = label;
+  const body = document.createElement("div");
+  body.className = "chat-text"; body.textContent = text;
+  row.append(heading, body); $("conversation").append(row);
+  return body;
+}
+function conversationContext(source) {
+  const messages = [...$("conversation").children].map(row =>
+    `${row.dataset.role === "user" ? "用户" : "助手"}：\n${row.querySelector(".chat-text").textContent}`);
+  return [`原文：\n${source}`, `结果：\n${$("primary-result").textContent}`, ...messages].join("\n\n");
+}
 function fitContent() { $("panel").classList.remove("held-height"); }
 
 function message(id, text) {
@@ -124,7 +149,7 @@ let formulaTimer;
 function renderFormula(final = false) {
   clearTimeout(formulaTimer);
   if (mode !== "latex") return;
-  const text = window.resultFormat.unwrapLatex($("result").textContent);
+  const text = window.resultFormat.unwrapLatex($("primary-result").textContent);
   $("formula-preview").hidden = !text;
   $("formula-hint").hidden = true;
   if (!text) return;
@@ -143,7 +168,7 @@ async function run(action = "task", text) {
     return;
   }
   const source = $("source").value.trim();
-  const context = action === "task" ? undefined : `原文：\n${source}\n结果：\n${$("result").textContent}`;
+  const context = action === "task" ? undefined : conversationContext(source);
   if (action === "task" && !source && !image) {
     message("error", "请输入文字或选择图片。");
     $("source").focus();
@@ -161,20 +186,24 @@ async function run(action = "task", text) {
   const requestId = crypto.randomUUID();
   activeRequestId = requestId;
   cancelled = false;
-  hasResult = false;
+  hasResult = action !== "task" && Boolean($("primary-result").textContent);
   renderAsLatex = mode === "latex" && action === "task";
-  $("panel").classList.toggle("latex-view", renderAsLatex);
-  $("result").textContent = "";
-  $("formula-preview").hidden = $("formula-hint").hidden = true;
+  $("panel").classList.toggle("latex-view", mode === "latex");
   $("result-section").hidden = false;
   if (action === "task") {
-    followupOpen = false;
-    $("followup-form").hidden = true;
-  }
-  if (action === "explain") {
+    resetConversation();
+    $("primary-result").textContent = "";
+    $("formula-preview").hidden = $("formula-hint").hidden = true;
+  } else {
     followupOpen = true;
-    $("result-label").textContent = "解释";
+    $("panel").classList.add("conversation-open");
+    $("conversation").hidden = false;
+    if (action === "followup") appendMessage("user", text);
+    responseElement = appendMessage("assistant", "", action === "explain" ? "解释" : "回答");
+    $("followup-form").hidden = false;
   }
+  responseElement.classList.add("streaming-response");
+  $("result").scrollTop = $("result").scrollHeight;
   updateControls();
   try {
     const completed = await api.task({
@@ -190,7 +219,11 @@ async function run(action = "task", text) {
     });
     // The invoke response is authoritative even when queued stream events have
     // not reached a background renderer yet.
-    if (!cancelled && typeof completed === "string") $("result").textContent = completed;
+    if (!cancelled && typeof completed === "string") {
+      const following = $("result").scrollHeight - $("result").scrollTop - $("result").clientHeight < 36;
+      responseElement.textContent = completed;
+      if (following) $("result").scrollTop = $("result").scrollHeight;
+    }
     canContinueSession = !cancelled;
   } catch (error) {
     if (!cancelled) fail(error);
@@ -198,16 +231,18 @@ async function run(action = "task", text) {
   } finally {
     activeRequestId = undefined;
     busy = false;
+    responseElement.classList.remove("streaming-response");
+    if (action !== "task" && !responseElement.textContent) responseElement.textContent = cancelled ? "已停止生成。" : "未生成回复，请重试。";
     if (action === "task" && !cancelled) {
-      if (mode === "latex") { $("result").textContent = window.resultFormat.unwrapLatex($("result").textContent); renderFormula(true); }
+      if (mode === "latex") { $("primary-result").textContent = window.resultFormat.unwrapLatex($("primary-result").textContent); renderFormula(true); }
       if (mode === "ocr-translate") {
-        const split = window.resultFormat.splitTranslation($("result").textContent);
+        const split = window.resultFormat.splitTranslation($("primary-result").textContent);
         if (split) { if (split.source) $("source").value = split.source;
-          $("result").textContent = split.translation || $("result").textContent;
+          $("primary-result").textContent = split.translation || $("primary-result").textContent;
           $("result-label").textContent = "译文"; capturedSource(true); resizeSource(); }
       }
     }
-    hasResult = Boolean($("result").textContent);
+    hasResult = Boolean($("primary-result").textContent);
     $("followup-form").hidden = !followupOpen || !hasResult;
     if (followupOpen && hasResult) $("followup").focus();
     updateControls();
@@ -217,9 +252,9 @@ api.onTask(({ event, data, requestId }) => {
   if (!busy || requestId !== activeRequestId) return;
   const result = $("result");
   const following = result.scrollHeight - result.scrollTop - result.clientHeight < 36;
-  if (event === "delta") $("result").textContent += data.text;
-  if (event === "done" && !$("result").textContent)
-    $("result").textContent = data.text;
+  if (event === "delta") responseElement.textContent += data.text;
+  if (event === "done" && !responseElement.textContent)
+    responseElement.textContent = data.text;
   if (event === "error" && !cancelled) message("error", data.message);
   if (renderAsLatex) { clearTimeout(formulaTimer); formulaTimer = setTimeout(() => renderFormula(), 120); }
   if (following) result.scrollTop = result.scrollHeight;
@@ -256,7 +291,7 @@ $("stop").addEventListener("click", async () => {
 });
 $("copy").addEventListener("click", async () => {
   try {
-    await api.copy($("result").textContent);
+    await api.copy($("primary-result").textContent);
     $("copy").title = "已复制";
     setTimeout(() => { $("copy").title = "拷贝结果"; }, 1600);
   } catch (error) {
@@ -331,13 +366,14 @@ api.onCommand(async (command) => {
   $("source").focus();
   if (command.type === "input") {
     if (busy || shared.taskRunning) return;
-    canContinueSession = false; setMode("translate"); $("source").value = ""; $("remove-image").click();
+    canContinueSession = false; resetConversation(); $("primary-result").textContent = ""; hasResult = false;
+    setMode("translate"); $("source").value = ""; $("remove-image").click();
     $("result-section").hidden = true; resizeSource(); updateControls(); return;
   }
   if (command.type === "history") {
     if (busy || shared.taskRunning) return;
-    canContinueSession = false; setMode(command.entry.mode); $("source").value = command.entry.source;
-    $("remove-image").click(); $("result").textContent = command.entry.result;
+    canContinueSession = false; resetConversation(); setMode(command.entry.mode); $("source").value = command.entry.source;
+    $("remove-image").click(); $("primary-result").textContent = command.entry.result;
     hasResult = true; $("result-section").hidden = false; resizeSource(); renderFormula(true); updateControls(); return;
   }
   if (command.type === "capture") {
