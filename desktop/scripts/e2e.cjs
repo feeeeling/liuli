@@ -764,12 +764,16 @@ test(
     const beforeSilent = requests.length;
     overlay = await beginCapture("silent");
     await selectFixture(overlay);
-    if (localOCRAvailable) assert.match(await application.evaluate(({ clipboard }) => clipboard.readText()), /Hello\s*world/i);
+    if (localOCRAvailable) {
+      await panel.waitForFunction(() => window.liuli.clipboardText().then(text => /Hello\s*world/i.test(text)), undefined, { timeout: 5000 });
+      assert.match(await application.evaluate(({ clipboard }) => clipboard.readText()), /Hello\s*world/i);
+    }
     assert.equal(requests.length, beforeSilent, "local-only silent OCR must work without a model call");
     assert.equal(await panelVisible(), false);
     await settings.evaluate(() => window.liuli.savePreferences({ enhanceSilentOCR: true }));
     overlay = await beginCapture("silent");
     await selectFixture(overlay);
+    await panel.waitForFunction(() => window.liuli.clipboardText().then(text => text === "截图识别结果：Hello world"), undefined, { timeout: 5000 });
     assert.equal(await application.evaluate(({ clipboard }) => clipboard.readText()), "截图识别结果：Hello world");
     assert.equal(await panelVisible(), false);
     const entries = await settings.evaluate(() => window.liuli.history());
@@ -779,6 +783,7 @@ test(
     raceClipboard = true;
     overlay = await beginCapture("silent");
     await selectFixture(overlay);
+    await panel.waitForFunction(() => window.liuli.clipboardText().then(text => text === "new user clipboard"), undefined, { timeout: 5000 });
     assert.equal(await application.evaluate(({ clipboard }) => clipboard.readText()), "new user clipboard", "model refinement must not overwrite a later user copy");
     await settings.evaluate(id => window.liuli.restoreHistory(id), entries.find(item => item.mode === "latex").id);
     await panel.waitForFunction(() => document.querySelector("#formula-preview .katex"));
