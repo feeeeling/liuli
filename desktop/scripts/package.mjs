@@ -2,12 +2,10 @@ import { packager } from "@electron/packager";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { includeRuntimeFile } from "../runtime-files.cjs";
 import { buildNative } from "./build-native.cjs";
 import { buildRenderer } from "./build-renderer.cjs";
+import { writeIcon } from "./create-icon.cjs";
 
 const desktop = fileURLToPath(new URL("../", import.meta.url));
 const root = path.resolve(desktop, "..");
@@ -25,16 +23,7 @@ if (process.platform !== "win32")
 await rm(stage, { recursive: true, force: true });
 await mkdir(path.join(daemon, "dist"), { recursive: true });
 const icon = path.join(stage, "icon.ico");
-const electron = createRequire(import.meta.url)("electron");
-await promisify(execFile)(
-  electron,
-  [
-    path.join(desktop, "scripts", "create-icon.cjs"),
-    path.join(root, "docs", "assets", "icon.png"),
-    icon,
-  ],
-  { windowsHide: true, timeout: 30_000 },
-);
+writeIcon(path.join(root, "docs", "assets", "icon.png"), icon);
 await cp(
   path.join(root, "daemon", "dist", "index.mjs"),
   path.join(daemon, "dist", "index.mjs"),

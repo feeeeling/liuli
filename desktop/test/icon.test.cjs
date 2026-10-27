@@ -1,0 +1,21 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { writeIcon } = require("../scripts/create-icon.cjs");
+test("Windows ICO embeds the existing PNG without starting a graphical Electron process", t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "liuli-icon-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const source = path.resolve(__dirname, "../../docs/assets/icon.png");
+  const target = path.join(dir, "icon.ico");
+  writeIcon(source, target);
+  const ico = fs.readFileSync(target), png = fs.readFileSync(source);
+  assert.equal(ico.readUInt16LE(2), 1);
+  assert.equal(ico.readUInt16LE(4), 1);
+  assert.equal(ico.readUInt8(6), 0);
+  assert.equal(ico.readUInt8(7), 0);
+  assert.equal(ico.readUInt32LE(14), png.length);
+  assert.equal(ico.readUInt32LE(18), 22);
+  assert.ok(ico.subarray(22).equals(png));
+});
