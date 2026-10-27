@@ -21,11 +21,12 @@ test(
       const archive = path.join(path.dirname(process.env.LIULI_E2E_EXECUTABLE), "resources", "app.asar");
       for (const file of ["main.cjs", "preload.cjs", "selection.cjs", "panel-bounds.cjs", "window-appearance.cjs", "renderer/appearance.js", "renderer/panel.html", "renderer/panel.js",
         "renderer/panel.css", "renderer/settings.html", "renderer/settings.js", "renderer/settings.css", "renderer/common.css",
-        "screenshot.cjs", "capture-bounds.cjs", "capture-preload.cjs", "ocr.cjs", "window-chrome.cjs", "renderer/capture.html", "renderer/capture.js", "renderer/capture.css", "renderer/result-format.js", "renderer/vendor/katex/katex.min.js"]) {
+        "screenshot.cjs", "screen-capture.cjs", "capture-bounds.cjs", "capture-preload.cjs", "ocr.cjs", "window-chrome.cjs", "renderer/capture.html", "renderer/capture.js", "renderer/capture.css", "renderer/result-format.js", "renderer/vendor/katex/katex.min.js"]) {
         assert.ok(extractFile(archive, path.normalize(file)).equals(await fs.readFile(path.join(desktop, file))), `Packaged file is stale: ${file}`);
       }
       assert.ok((await fs.stat(path.join(path.dirname(archive), "SelectionCapture.exe"))).size > 0);
       assert.ok((await fs.stat(path.join(path.dirname(archive), "WindowChrome.exe"))).size > 0);
+      assert.ok((await fs.stat(path.join(path.dirname(archive), "ScreenCapture.exe"))).size > 0);
       assert.ok((await fs.readFile(path.join(path.dirname(archive), "ocr.ps1"))).equals(await fs.readFile(path.join(desktop, "native", "ocr.ps1"))));
       for (const file of ["renderer/vendor/katex/katex.min.css", "renderer/vendor/katex/fonts/KaTeX_Main-Regular.woff2"])
         assert.ok(extractFile(archive, path.normalize(file)).equals(await fs.readFile(path.join(desktop, file))));
@@ -235,6 +236,15 @@ test(
       false,
       "startup should open settings, not the floating card",
     );
+    assert.equal(await application.evaluate(({ app }) => {
+      const { tray } = process.mainModule.require(`${app.getAppPath()}/main.cjs`);
+      let count = 0;
+      const original = tray.popUpContextMenu;
+      tray.popUpContextMenu = () => { count++; };
+      try { tray.emit("click"); } finally { tray.popUpContextMenu = original; }
+      return count;
+    }), 1, "left clicking the tray must open its menu");
+    assert.equal(await panelVisible(), false, "tray click must not open a floating card");
     assert.equal(await panel.locator("#provider").count(), 0);
     assert.equal(await panel.locator("#model").count(), 0);
 
@@ -329,6 +339,7 @@ test(
         document.getElementById("stop").hidden,
     );
     await panel.locator("#copy").click();
+    await panel.waitForFunction(() => document.getElementById("copy").title === "已复制");
     assert.equal(
       await application.evaluate(({ clipboard }) => clipboard.readText()),
       "你好，世界。",
@@ -512,7 +523,8 @@ test(
     await panel.waitForFunction(() => document.getElementById("result").textContent.length > 1000 && document.getElementById("stop").hidden);
     await settlePanel();
     assert.ok(await panel.evaluate(() => innerHeight) > manual.height + 20);
-    assert.ok(await panel.evaluate(() => innerHeight) <= savedSize.height + 4);
+    assert.ok(await panel.evaluate(() => innerHeight) > savedSize.height + 60, "long results should extend a manually preferred height before scrolling");
+    assert.ok(await panel.evaluate(() => innerHeight) <= Math.min(savedSize.height + 180, 760) + 4);
     await panel.locator("#source").fill("A brief sentence.");
     await panel.locator("#translate").click();
     await panel.waitForFunction(() => document.getElementById("stop").hidden);
@@ -587,16 +599,24 @@ test(
     });
     await new Promise(resolve => setTimeout(resolve, 200));
     const captureFixtureBounds = await captureFixture.evaluate(w => w.getBounds());
-    if (!interactiveDesktop) {
-      await captureFixture.evaluate(async fixture => {
+    await captureFixture.evaluate(async (fixture, interactive) => {
         const electron = process.mainModule.require("electron");
-        const image = await fixture.webContents.capturePage();
-        const display = electron.screen.getPrimaryDisplay();
-        electron.desktopCapturer.getSources = async () => [{ display_id: String(display.id), thumbnail: image }];
-      });
-    }
+        const pixels = process.mainModule.require(`${electron.app.getAppPath()}/screen-capture.cjs`);
+        const original = pixels.capturePixels;
+        pixels.calls = [];
+        pixels.capturePixels = async rect => {
+          pixels.calls.push(rect);
+          const selectors = electron.BrowserWindow.getAllWindows().filter(w => w.webContents.getURL().endsWith("capture.html"));
+          if (selectors.some(w => w.getOpacity() !== 0)) throw new Error("Selection overlay must be transparent before reading desktop pixels");
+          if (interactive) return original(rect);
+          const bounds = electron.screen.dipToScreenRect(fixture, fixture.getBounds());
+          const image = (await fixture.webContents.capturePage()).resize({ width: bounds.width, height: bounds.height });
+          return image.crop({ ...rect, x: rect.x - bounds.x, y: rect.y - bounds.y });
+        };
+        electron.desktopCapturer.getSources = async () => { throw new Error("Direct desktop selection must not capture a full-screen thumbnail"); };
+      }, interactiveDesktop);
     const beginCapture = async action => {
-      await captureFixture.evaluate(w => { w.show(); w.focus(); });
+      await captureFixture.evaluate(w => { w.setAlwaysOnTop(true); w.show(); w.focus(); });
       await panel.evaluate(action => { window.captureJob = window.liuli.capture(action); }, action);
       let overlay;
       for (let i = 0; i < 200; i++) {
@@ -605,7 +625,8 @@ test(
         await new Promise(resolve => setTimeout(resolve, 25));
       }
       assert.ok(overlay, "native screenshot selector must open");
-      await overlay.waitForFunction(() => document.getElementById("screen").complete && document.getElementById("screen").naturalWidth > 0);
+      await overlay.waitForFunction(() => document.body.dataset.ready === "true");
+      assert.equal(await overlay.locator("img").count(), 0, "selection must show the live desktop, not a frozen screenshot");
       return overlay;
     };
     const selectFixture = async (overlay, reverse = false) => {
@@ -623,8 +644,14 @@ test(
     await overlay.keyboard.press("Escape").catch(error => { if (!overlay.isClosed()) throw error; });
     await panel.evaluate(() => window.captureJob);
     assert.equal(requests.length, beforeCancel);
+    assert.equal(await application.evaluate(({ app }) => process.mainModule.require(`${app.getAppPath()}/screen-capture.cjs`).calls.length), 0, "cancel must not read any screen pixels");
     overlay = await beginCapture("screenshot");
     await selectFixture(overlay, true);
+    const actualCapture = await application.evaluate(({ app }) => process.mainModule.require(`${app.getAppPath()}/screen-capture.cjs`).calls[0]);
+    const expectedCapture = await application.evaluate(({ screen }, bounds) => screen.dipToScreenRect(null, {
+      x: bounds.x + 12, y: bounds.y + 12, width: 740, height: 230,
+    }), captureFixtureBounds);
+    assert.deepEqual(actualCapture, expectedCapture, "native capture must receive only the selected physical-pixel rectangle");
     await panel.waitForFunction(() => document.getElementById("result").textContent === "你好，世界。" && document.getElementById("stop").hidden);
     assert.equal(await panel.locator("#source").inputValue(), "Hello world");
     const localOCRAvailable = JSON.stringify(requests.at(-1)).includes("本地 OCR 草稿");
@@ -637,6 +664,7 @@ test(
     await panel.waitForFunction(() => document.querySelector("#formula-preview .katex") && document.getElementById("stop").hidden);
     assert.equal(await panel.locator("#result").textContent(), String.raw`\frac{x^{2}}{2}+\sqrt{y}=\sum_{i=1}^{n}i`);
     await panel.locator("#copy").click();
+    await panel.waitForFunction(() => document.getElementById("copy").title === "已复制");
     assert.equal(await application.evaluate(({ clipboard }) => clipboard.readText()), await panel.locator("#result").textContent());
     await panel.screenshot({ path: path.join(project, "dist", "qa", `latex-${suffix}.png`) });
     await settings.evaluate(() => window.liuli.savePreferences({ enhanceSilentOCR: false }));

@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { roundedRegion } = require("../window-appearance.cjs");
-test("native glass is clipped to rounded corners with no rectangular backdrop halo", () => {
+test("native window region excludes all four rectangular corner pixels", () => {
   for (const [width, height] of [[420, 240], [700, 640], [12, 10]]) {
     const region = roundedRegion(width, height);
     assert.ok(region.length);

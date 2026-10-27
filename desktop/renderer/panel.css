@@ -1,5 +1,5 @@
 html, body { background: transparent; overflow: hidden; }
-.floating-card { position: relative; display: flex; flex-direction: column; gap: 12px; max-height: var(--panel-max-height, 640px); padding: 16px; border-radius: 16px; border: 1px solid var(--edge); background: var(--plate); overflow: hidden; box-shadow: inset 0 0 0 .5px #0000000c; }
+.floating-card { position: relative; display: flex; flex-direction: column; gap: 12px; max-height: var(--panel-max-height, 640px); padding: 16px; border-radius: 16px; clip-path: inset(0 round 16px); border: 1px solid var(--edge); background: var(--plate); overflow: hidden; box-shadow: inset 0 0 0 .5px #0000000c; }
 .native-glass .floating-card { background: var(--glass-tint); }
 .reduced-transparency .floating-card { background: var(--settings); }
 .live-resizing { height: var(--panel-max-height); }
@@ -28,8 +28,7 @@ textarea::placeholder { color: var(--tertiary); }
 #image-area { display: flex; align-items: center; gap: 8px; padding-top: 6px; }
 #image-preview { max-height: 72px; max-width: 85%; border-radius: 10px; border: 1px solid var(--line); object-fit: contain; }
 .result-section { display: flex; flex-direction: column; min-height: 0; border-top: 1px solid var(--line); padding-top: 12px; gap: 6px; }
-#result { flex: 1 1 auto; min-height: 0; max-height: 260px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.65; user-select: text; }
-.user-sized #result { max-height: 420px; }
+#result { flex: 1 1 auto; min-height: 0; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.65; user-select: text; }
 #result:empty::before { content: "▍"; color: var(--secondary); font-size: 13px; }
 .running #result:empty::before { animation: breathe 1.3s ease-in-out infinite; }
 .result-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }

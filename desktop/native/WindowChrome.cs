@@ -6,6 +6,7 @@ using System.Web.Script.Serialization;
 // hidden helper keeps physical-pixel clipping synchronized without spawning on resize.
 internal static class WindowChrome {
     [StructLayout(LayoutKind.Sequential)] struct RECT { public int left, top, right, bottom; }
+    [StructLayout(LayoutKind.Sequential)] struct MARGINS { public int left, right, top, bottom; }
     [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr context);
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
     [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hwnd);
@@ -15,6 +16,7 @@ internal static class WindowChrome {
     [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr value);
     [DllImport("gdi32.dll")] static extern bool PtInRegion(IntPtr region, int x, int y);
     [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+    [DllImport("dwmapi.dll")] static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
     class Request { public string hwnd; public double radius; }
     static void Attribute(IntPtr hwnd, int attribute, int value) { DwmSetWindowAttribute(hwnd, attribute, ref value, sizeof(int)); }
     static void Main(string[] args) {
@@ -40,6 +42,8 @@ internal static class WindowChrome {
                 Attribute(hwnd, 2, 1); // DWMWA_NCRENDERING_POLICY / DWMNCRP_DISABLED
                 Attribute(hwnd, 33, 1); // DWMWA_WINDOW_CORNER_PREFERENCE / DONOTROUND
                 Attribute(hwnd, 34, unchecked((int)0xFFFFFFFE)); // DWMWA_BORDER_COLOR / NONE
+                var margins = new MARGINS();
+                DwmExtendFrameIntoClientArea(hwnd, ref margins);
                 var region = CreateRoundRectRgn(0, 0, rect.right - rect.left + 1, rect.bottom - rect.top + 1, diameter, diameter);
                 int width = rect.right - rect.left, height = rect.bottom - rect.top;
                 bool clipped = region != IntPtr.Zero && !PtInRegion(region, 0, 0) && !PtInRegion(region, width - 1, 0)

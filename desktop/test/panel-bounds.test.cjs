@@ -1,7 +1,14 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { constrain, fromEdge } = require("../panel-bounds.cjs");
+const { constrain, fromEdge, heightLimit } = require("../panel-bounds.cjs");
 const area = { x: -1920, y: 0, width: 1920, height: 1040 };
+test("long content can extend a preferred height within a finite work-area limit", () => {
+  assert.equal(heightLimit(undefined, area), 640);
+  assert.equal(heightLimit(390, area), 570);
+  assert.equal(heightLimit(700, area), 760);
+  assert.equal(heightLimit(900, area), 900);
+  assert.equal(heightLimit(390, { ...area, height: 464 }), 440);
+});
 test("manual resizing stays inside a monitor with a negative desktop origin", () => {
   assert.deepEqual(constrain({ x: -3000, y: 2000, width: 5000, height: 5000 }, area),
     { x: -1908, y: 12, width: 1000, height: 1016 });
