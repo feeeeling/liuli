@@ -38,9 +38,14 @@ jobs:
       - name: Archive Windows app
         shell: powershell
         run: |
-          # bsdtar can read binaries held with shared-read access after Electron tests.
-          tar.exe --format zip -cf ./Liuli-windows-x64.zip -C ./dist Liuli-win32-x64
-          if ($LASTEXITCODE -ne 0) { throw 'Windows ZIP archive failed.' }
+          # ZipFile shares reads of binaries and preserves UTF-8 names in the ZIP.
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::CreateFromDirectory(
+            (Resolve-Path ./dist/Liuli-win32-x64).Path,
+            (Join-Path $PWD 'Liuli-windows-x64.zip'),
+            [IO.Compression.CompressionLevel]::Optimal,
+            $true,
+            [Text.Encoding]::UTF8)
       - uses: actions/upload-artifact@v4
         with:
           name: Liuli-windows-x64
