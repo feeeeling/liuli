@@ -358,6 +358,7 @@ test(
     assert.equal(await panel.locator("#result").textContent(), "你好，世界。", "late stream IPC must not append to a finished result");
     await panel.locator("#copy").click();
     await panel.waitForFunction(() => document.getElementById("copy").title === "已复制");
+    await panel.waitForFunction(expected => window.liuli.clipboardText().then(text => text === expected), "你好，世界。", { timeout: 5000 });
     assert.equal(
       await application.evaluate(({ clipboard }) => clipboard.readText()),
       "你好，世界。",
@@ -535,7 +536,8 @@ test(
     const manual = await panel.evaluate(() => ({ width: innerWidth, height: innerHeight }));
     assert.ok(manual.width >= 465 && manual.height < 340, JSON.stringify(manual));
     const savedSize = JSON.parse(await fs.readFile(path.join(home, "ui-profile", "panel-size.json"), "utf8"));
-    assert.ok(Math.abs(savedSize.width - manual.width) <= 4 && savedSize.height >= 385);
+    assert.ok(Math.abs(savedSize.width - manual.width) <= 4 && Math.abs(savedSize.height - manual.height) <= 4,
+      "resizing must retain the chosen height on release instead of snapping back");
     await panel.locator("#source").fill("LONG_LAYOUT_TEST\n" + "A readable translation card. ".repeat(200));
     await panel.locator("#translate").click();
     await panel.waitForFunction(() => document.getElementById("result").textContent.length > 1000 && document.getElementById("stop").hidden);
@@ -549,6 +551,74 @@ test(
     await panel.waitForFunction(() => innerHeight < 340);
     assert.ok(Math.abs(await panel.evaluate(() => innerWidth) - manual.width) <= 4, "auto fitting must preserve the user's preferred width");
     await assert.rejects(settings.evaluate(() => window.liuli.stepPanelResize(50, 50)), /Invalid sender/);
+
+    // Real window operations during a continuous drag: enable resizing once,
+    // update bounds atomically, then restore its rounded region once on release.
+    const beforeGesture = await application.evaluate(({ BrowserWindow, app }) => {
+      const w = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html"));
+      w.gestureCounts = {};
+      w.gestureOriginals = {};
+      for (const name of ["setResizable", "setBounds", "setPosition", "setShape"]) {
+        w.gestureOriginals[name] = w[name];
+        w[name] = function(...args) {
+          this.gestureCounts[name] = (this.gestureCounts[name] || 0) + 1;
+          return this.gestureOriginals[name].apply(this, args);
+        };
+      }
+      const chrome = process.mainModule.require(`${app.getAppPath()}/main.cjs`).windowChrome;
+      chrome.gestureOriginal = chrome.round;
+      chrome.gestureRounds = 0;
+      chrome.round = function(...args) { this.gestureRounds++; return this.gestureOriginal(...args); };
+      return w.getBounds();
+    });
+    await panel.evaluate(() => window.liuli.beginPanelResize("e", { x: 0, y: 0 }));
+    for (let i = 1; i <= 40; i++) await panel.evaluate(x => window.liuli.dragPanelResize({ x, y: 0 }), i * 2);
+    const duringGesture = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
+      .find(w => w.webContents.getURL().endsWith("panel.html")).getBounds());
+    assert.ok(Math.abs(duringGesture.height - beforeGesture.height) <= 4, "horizontal resizing must not jump in height");
+    await panel.evaluate(() => window.liuli.endPanelResize());
+    const gestureStats = await application.evaluate(({ BrowserWindow, app }) => {
+      const w = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html"));
+      const chrome = process.mainModule.require(`${app.getAppPath()}/main.cjs`).windowChrome;
+      const stats = { ...w.gestureCounts, round: chrome.gestureRounds };
+      for (const name in w.gestureOriginals) w[name] = w.gestureOriginals[name];
+      delete w.gestureOriginals; delete w.gestureCounts;
+      chrome.round = chrome.gestureOriginal;
+      delete chrome.gestureOriginal; delete chrome.gestureRounds;
+      return stats;
+    });
+    t.diagnostic(`40 drag updates: ${JSON.stringify(gestureStats)}`);
+    assert.ok(gestureStats.setResizable <= 2 && gestureStats.round <= 2, JSON.stringify(gestureStats));
+    assert.equal(gestureStats.setPosition || 0, 0, "bounds must update atomically instead of moving and resizing separately");
+    assert.ok(Math.abs(duringGesture.width - beforeGesture.width - 80) <= 4);
+    await settlePanel();
+    const pointerStart = await panel.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+    const grip = await panel.locator("#resize-grip").boundingBox();
+    await panel.mouse.move(grip.x + 5, grip.y + 5);
+    await panel.mouse.down();
+    await panel.mouse.move(grip.x - 45, grip.y - 25, { steps: 40 });
+    await panel.mouse.up();
+    await panel.waitForFunction(() => document.getElementById("panel").classList.contains("held-height") &&
+      !document.getElementById("panel").classList.contains("live-resizing"));
+    await settlePanel();
+    const pointerEnd = await panel.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+    assert.ok(Math.abs(pointerEnd.width - (pointerStart.width - 50)) <= 5, JSON.stringify({ pointerStart, pointerEnd }));
+    assert.ok(Math.abs(pointerEnd.height - (pointerStart.height - 30)) <= 5, JSON.stringify({ pointerStart, pointerEnd }));
+    const moveStart = await application.evaluate(({ BrowserWindow, screen }) => {
+      const bounds = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html")).getBounds();
+      const area = screen.getDisplayMatching(bounds).workArea;
+      return { bounds, dx: bounds.x + bounds.width + 32 < area.x + area.width ? 20 : -20,
+        dy: bounds.y + bounds.height + 32 < area.y + area.height ? 20 : -20 };
+    });
+    await panel.evaluate(() => window.liuli.beginPanelResize("move", { x: 0, y: 0 }));
+    await panel.evaluate(({ dx, dy }) => window.liuli.dragPanelResize({ x: dx, y: dy }), moveStart);
+    await panel.evaluate(() => window.liuli.endPanelResize());
+    const moveEnd = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
+      .find(w => w.webContents.getURL().endsWith("panel.html")).getBounds());
+    assert.deepEqual(moveEnd, { ...moveStart.bounds, x: moveStart.bounds.x + moveStart.dx,
+      y: moveStart.bounds.y + moveStart.dy }, "moving the card must preserve its dimensions");
+    await panel.locator("#source").fill("A new sentence after resizing.");
+    await panel.waitForFunction(() => !document.getElementById("panel").classList.contains("held-height"));
 
     await application.evaluate(
       async ({ clipboard, nativeImage, ClipboardItem }, file) => {
@@ -683,6 +753,8 @@ test(
     assert.equal(await panel.locator("#result").textContent(), String.raw`\frac{x^{2}}{2}+\sqrt{y}=\sum_{i=1}^{n}i`);
     await panel.locator("#copy").click();
     await panel.waitForFunction(() => document.getElementById("copy").title === "已复制");
+    await panel.waitForFunction(expected => window.liuli.clipboardText().then(text => text === expected),
+      await panel.locator("#result").textContent(), { timeout: 5000 });
     assert.equal(await application.evaluate(({ clipboard }) => clipboard.readText()), await panel.locator("#result").textContent());
     await panel.screenshot({ path: path.join(project, "dist", "qa", `latex-${suffix}.png`) });
     await settings.evaluate(() => window.liuli.savePreferences({ enhanceSilentOCR: false }));

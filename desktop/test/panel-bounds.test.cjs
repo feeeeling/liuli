@@ -13,7 +13,7 @@ test("manual resizing stays inside a monitor with a negative desktop origin", ()
   assert.deepEqual(constrain({ x: -3000, y: 2000, width: 5000, height: 5000 }, area),
     { x: -1908, y: 12, width: 1000, height: 1016 });
   assert.deepEqual(constrain({ x: -1500, y: 300, width: 20, height: 20 }, area),
-    { x: -1500, y: 300, width: 360, height: 340 });
+    { x: -1500, y: 300, width: 360, height: 140 });
 });
 test("dragging north/west edges keeps the opposite edge anchored even at minimum size", () => {
   const start = { x: -1400, y: 200, width: 500, height: 500 };
@@ -21,7 +21,9 @@ test("dragging north/west edges keeps the opposite edge anchored even at minimum
   assert.equal(next.x + next.width, start.x + start.width);
   assert.equal(next.y + next.height, start.y + start.height);
   assert.equal(next.width, 360);
-  assert.equal(next.height, 340);
+  assert.equal(next.height, 200);
   assert.deepEqual(fromEdge(start, "se", { x: 100, y: 80 }, area),
     { ...start, width: 600, height: 580 });
+  assert.equal(fromEdge({ ...start, height: 170 }, "e", { x: 80, y: 0 }, area).height, 170,
+    "a horizontal drag must not force a compact card to a taller minimum");
 });

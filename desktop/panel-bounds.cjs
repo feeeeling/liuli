@@ -7,7 +7,7 @@ function heightLimit(preferredHeight, area) {
 }
 function constrain(bounds, area) {
   const width = clamp(bounds.width, 360, Math.min(1000, area.width - 24));
-  const height = clamp(bounds.height, 340, area.height - 24);
+  const height = clamp(bounds.height, 140, area.height - 24);
   return { x: clamp(bounds.x, area.x + 12, area.x + area.width - width - 12),
     y: clamp(bounds.y, area.y + 12, area.y + area.height - height - 12), width, height };
 }

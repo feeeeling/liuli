@@ -54,6 +54,16 @@ let manualPanelSize;
 let panelGesture;
 let sizeWrites = Promise.resolve();
 let nativeGlass = false;
+let panelLayoutKey;
+let panelShapeKey;
+let panelMoveTimer;
+
+function panelLayout(value) {
+  const key = JSON.stringify(value);
+  if (panelLayoutKey === key) return;
+  panelLayoutKey = key;
+  send(window, "layout", value);
+}
 
 function appearance() {
   return { nativeGlass, dark: nativeTheme.shouldUseDarkColors,
@@ -61,8 +71,11 @@ function appearance() {
     highContrast: nativeTheme.shouldUseHighContrastColors };
 }
 function applyPanelShape() {
-  if (!window || window.isDestroyed()) return;
+  if (!window || window.isDestroyed() || panelGesture) return;
   const { width, height } = window.getBounds();
+  const key = `${width}:${height}:${screen.getDisplayMatching(window.getBounds()).scaleFactor}`;
+  if (panelShapeKey === key) return;
+  panelShapeKey = key;
   window.setShape(roundedRegion(width, height));
   windowChrome?.round(window);
 }
@@ -122,9 +135,10 @@ function setPanelSize(width, height) {
   // Windows pins min/max to the current size when resizable is false.
   // Lift that constraint only for this synchronous programmatic resize.
   const visible = window.isVisible();
-  window.setResizable(true);
+  const wasResizable = window.isResizable();
+  if (!wasResizable) window.setResizable(true);
   try { window.setSize(width, height); }
-  finally { window.setResizable(false); applyPanelShape(); if (!visible) window.hide(); }
+  finally { if (!wasResizable) window.setResizable(false); applyPanelShape(); if (!visible) window.hide(); }
 }
 
 function fitPanel(area) {
@@ -134,7 +148,7 @@ function fitPanel(area) {
   const maxHeight = heightLimit(size?.height, area);
   if (Math.abs(bounds.width - width) >= 3 || bounds.height > maxHeight + 2)
     setPanelSize(width, Math.min(bounds.height, maxHeight));
-  send(window, "layout", { maxHeight, userSized: Boolean(size), liveResize: Boolean(panelGesture) });
+  panelLayout({ maxHeight, userSized: Boolean(size), liveResize: Boolean(panelGesture) });
   return maxHeight;
 }
 
@@ -145,12 +159,21 @@ function persistPanelSize() {
   return pending;
 }
 
-function applyManualBounds(bounds, area) {
+function applyManualBounds(bounds, area, vertical = true) {
   const next = constrain(bounds, area);
-  manualPanelSize = { width: next.width, height: next.height };
-  setPanelSize(next.width, next.height);
-  window.setPosition(next.x, next.y);
-  send(window, "layout", { maxHeight: next.height, userSized: true, liveResize: Boolean(panelGesture) });
+  const current = window.getBounds();
+  if (!["x", "y", "width", "height"].some(key => current[key] !== next[key])) return;
+  manualPanelSize = { width: next.width, height: vertical ? next.height : manualPanelSize?.height || 640 };
+  // A live gesture enables resizing once; position and size are one native update.
+  if (panelGesture) { panelGesture.changed = true; window.setBounds(next); }
+  else {
+    window.setResizable(true);
+    window.setBounds(next);
+    window.setResizable(false);
+    applyPanelShape();
+    panelLayout({ maxHeight: heightLimit(manualPanelSize.height, area), userSized: true,
+      liveResize: false, ...(vertical ? { heldHeight: next.height } : {}) });
+  }
 }
 
 async function translateSelection() {
@@ -439,27 +462,55 @@ function registerIPC() {
   handle("close-settings", () => settingsWindow.close(), ["settings"]);
   handle("quit", () => app.quit(), ["settings"]);
   handle("panel-resize-start", (edge, cursor) => {
-    if (!["n", "s", "e", "w", "ne", "nw", "se", "sw"].includes(edge)) throw new Error("Invalid resize edge");
+    if (!["move", "n", "s", "e", "w", "ne", "nw", "se", "sw"].includes(edge)) throw new Error("Invalid resize edge");
     if (!cursor || ![cursor.x, cursor.y].every(value => Number.isFinite(value) && Math.abs(value) < 1e7)) return;
     panelGesture = { edge, cursor, bounds: window.getBounds(),
       area: screen.getDisplayMatching(window.getBounds()).workArea };
+    if (edge !== "move") {
+      window.setResizable(true);
+      window.setShape([]);
+      panelShapeKey = undefined;
+      panelLayout({ maxHeight: heightLimit(manualPanelSize?.height, panelGesture.area), userSized: true, liveResize: true });
+    }
   }, ["panel"]);
   handle("panel-resize-drag", (cursor) => {
     if (!panelGesture) return;
     if (!cursor || ![cursor.x, cursor.y].every(value => Number.isFinite(value) && Math.abs(value) < 1e7)) return;
     const { bounds, edge, area } = panelGesture;
-    applyManualBounds(fromEdge(bounds, edge, { x: cursor.x - panelGesture.cursor.x, y: cursor.y - panelGesture.cursor.y }, area), area);
+    if (edge === "move") {
+      const x = Math.round(bounds.x + cursor.x - panelGesture.cursor.x);
+      const y = Math.round(bounds.y + cursor.y - panelGesture.cursor.y);
+      const current = window.getBounds();
+      if (current.x !== x || current.y !== y) window.setPosition(x, y);
+      return;
+    }
+    applyManualBounds(fromEdge(bounds, edge, { x: cursor.x - panelGesture.cursor.x, y: cursor.y - panelGesture.cursor.y }, area), area, /[ns]/.test(edge));
   }, ["panel"]);
   handle("panel-resize-end", () => {
+    const gesture = panelGesture;
     panelGesture = undefined;
-    fitPanel(screen.getDisplayMatching(window.getBounds()).workArea);
+    if (gesture) {
+      if (gesture.edge === "move") {
+        const area = screen.getDisplayMatching(window.getBounds()).workArea;
+        fitPanel(area);
+        const b = window.getBounds(), next = constrain(b, area);
+        if (next.x !== b.x || next.y !== b.y) window.setPosition(next.x, next.y);
+        applyPanelShape();
+        return;
+      }
+      window.setResizable(false);
+      applyPanelShape();
+      if (gesture.changed) panelLayout({ maxHeight: heightLimit(manualPanelSize?.height, gesture.area), userSized: true,
+        liveResize: false, ...(/[ns]/.test(gesture.edge) ? { heldHeight: window.getBounds().height } : {}) });
+      else fitPanel(gesture.area);
+    }
     return persistPanelSize();
   }, ["panel"]);
   handle("panel-resize-step", (dx, dy) => {
     if (![dx, dy].every(value => Number.isFinite(value) && Math.abs(value) <= 50)) return;
     const bounds = window.getBounds();
     applyManualBounds({ ...bounds, width: (manualPanelSize?.width || bounds.width) + dx,
-      height: (manualPanelSize?.height || bounds.height) + dy }, screen.getDisplayMatching(bounds).workArea);
+      height: bounds.height + dy }, screen.getDisplayMatching(bounds).workArea, dy !== 0);
     return persistPanelSize();
   }, ["panel"]);
   handle(
@@ -751,7 +802,14 @@ else {
         if (preferences.hideOnBlur && !pinned && !panelDialogOpen && !panelGesture)
           window.hide();
       });
-      window.on("moved", () => { if (window.isVisible() && !panelGesture) fitPanel(screen.getDisplayMatching(window.getBounds()).workArea); });
+      window.on("moved", () => {
+        clearTimeout(panelMoveTimer);
+        if (window.isVisible() && !panelGesture) panelMoveTimer = setTimeout(() => {
+          if (window.isDestroyed() || panelGesture) return;
+          fitPanel(screen.getDisplayMatching(window.getBounds()).workArea);
+          applyPanelShape();
+        }, 100);
+      });
       window.on("resize", applyPanelShape);
       window.on("show", applyPanelShape);
       screen.on("display-metrics-changed", () => fitPanel(screen.getDisplayMatching(window.getBounds()).workArea));
@@ -817,6 +875,7 @@ else {
     });
   app.on("window-all-closed", () => {});
   app.on("before-quit", (event) => {
+    clearTimeout(panelMoveTimer);
     windowChrome?.close();
     cancelCapture();
     globalShortcut.unregisterAll();

@@ -18,6 +18,7 @@ let preferencesKey;
 let canContinueSession = false;
 let renderAsLatex = false;
 let activeRequestId;
+function fitContent() { $("panel").classList.remove("held-height"); }
 
 function message(id, text) {
   $(id).textContent = text || "";
@@ -112,6 +113,7 @@ function capturedSource(value) {
 }
 function setImage(value) {
   if (!value) return;
+  fitContent();
   image = value;
   document.querySelector(".source-section").classList.toggle("image-only", !$("source").value.trim());
   $("image-preview").src = `data:${value.mimeType};base64,${value.imageBase64}`;
@@ -133,6 +135,7 @@ function renderFormula(final = false) {
 }
 async function run(action = "task", text) {
   if (busy || stopping || shared.taskRunning || shared.loginRunning) return;
+  fitContent();
   message("error", "");
   message("notice", "");
   if (!health.ok) {
@@ -234,7 +237,7 @@ $("model-label").addEventListener("click", () =>
 );
 $("hide-panel").addEventListener("click", () => api.hidePanel().catch(fail));
 $("pin").addEventListener("click", () => api.pin(!shared.pinned).catch(fail));
-$("source").addEventListener("input", () => { capturedSource(false); resizeSource(); updateControls(); });
+$("source").addEventListener("input", () => { fitContent(); capturedSource(false); resizeSource(); updateControls(); });
 $("tools-toggle").addEventListener("click", () => setTools($("tools-content").hidden));
 for (const button of document.querySelectorAll("[data-capture]"))
   button.addEventListener("click", () => { setTools(false); void api.capture(button.dataset.capture).catch(fail); });
@@ -288,6 +291,7 @@ $("paste-image").addEventListener("click", async () => {
   }
 });
 $("remove-image").addEventListener("click", () => {
+  fitContent();
   image = undefined;
   document.querySelector(".source-section").classList.remove("image-only");
   $("image-area").hidden = true;
@@ -298,12 +302,14 @@ $("clear").addEventListener("click", () => {
   resizeSource();
   $("remove-image").click();
   setTools(false);
+  fitContent();
   capturedSource(false);
   resizeSource();
   $("source").focus();
 });
 $("paste-text").addEventListener("click", async () => {
   try {
+    fitContent();
     $("source").value = await api.clipboardText();
     resizeSource();
   } catch (error) {
@@ -352,6 +358,7 @@ api.onCommand(async (command) => {
     return;
   }
   setTools(false);
+  fitContent();
   capturedSource(command.type !== "input");
   resizeSource();
   $("source").focus();
@@ -387,32 +394,72 @@ api.onCommand(async (command) => {
     fail(error);
   }
 });
-api.onLayout(({ maxHeight, userSized, liveResize }) => {
+api.onLayout(({ maxHeight, userSized, liveResize, heldHeight }) => {
   $("panel").classList.toggle("user-sized", Boolean(userSized));
   $("panel").classList.toggle("live-resizing", Boolean(liveResize));
+  if (Number.isFinite(heldHeight)) {
+    document.documentElement.style.setProperty("--panel-held-height", `${heldHeight}px`);
+    $("panel").classList.add("held-height");
+  }
   const value = `${maxHeight}px`;
   if (document.documentElement.style.getPropertyValue("--panel-max-height") !== value) {
     document.documentElement.style.setProperty("--panel-max-height", value);
     resizeSource();
   }
-  requestAnimationFrame(() => void api.resizePanel($("panel").getBoundingClientRect().height).catch(() => {}));
+  if (!liveResize) scheduleFit();
 });
 let resizePointer;
-for (const handle of document.querySelectorAll("[data-resize]")) {
+let resizeGeneration = 0;
+let resizeFrame, resizePoint, resizeWriting = false;
+let resizeWrite = Promise.resolve();
+function scheduleDrag() {
+  if (resizeFrame || resizeWriting || !resizePoint) return;
+  resizeFrame = requestAnimationFrame(() => {
+    resizeFrame = undefined;
+    void flushDrag().finally(() => { if (resizePointer !== undefined) scheduleDrag(); });
+  });
+}
+function flushDrag() {
+  if (!resizePoint) return resizeWrite;
+  const point = resizePoint;
+  resizePoint = undefined;
+  resizeWriting = true;
+  resizeWrite = resizeWrite.then(() => api.dragPanelResize(point)).catch(fail)
+    .finally(() => { resizeWriting = false; });
+  return resizeWrite;
+}
+for (const handle of document.querySelectorAll("[data-resize], .panel-header")) {
   handle.addEventListener("pointerdown", event => {
     if (event.button !== 0) return;
+    if (handle.classList.contains("panel-header") && event.target.closest("button")) return;
     event.preventDefault();
     resizePointer = event.pointerId;
+    resizeGeneration++;
     handle.setPointerCapture(event.pointerId);
-    void api.beginPanelResize(handle.dataset.resize, { x: event.screenX, y: event.screenY }).catch(fail);
+    resizePoint = undefined;
+    const edge = handle.dataset.resize || "move";
+    $("panel").classList.toggle("moving", edge === "move");
+    resizeWrite = api.beginPanelResize(edge, { x: event.screenX, y: event.screenY }).catch(fail);
   });
   handle.addEventListener("pointermove", event => {
-    if (resizePointer === event.pointerId) void api.dragPanelResize({ x: event.screenX, y: event.screenY }).catch(fail);
+    if (resizePointer === event.pointerId) {
+      resizePoint = { x: event.screenX, y: event.screenY };
+      scheduleDrag();
+    }
   });
-  const end = event => {
+  const end = async event => {
     if (resizePointer !== event.pointerId) return;
+    const generation = resizeGeneration;
     resizePointer = undefined;
-    void api.endPanelResize().catch(fail);
+    if (event.type === "pointerup") resizePoint = { x: event.screenX, y: event.screenY };
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = undefined;
+    await resizeWrite;
+    if (generation !== resizeGeneration) return;
+    await flushDrag();
+    if (generation !== resizeGeneration) return;
+    await api.endPanelResize().catch(fail);
+    if (generation === resizeGeneration) $("panel").classList.remove("moving");
   };
   handle.addEventListener("pointerup", end);
   handle.addEventListener("pointercancel", end);
@@ -427,14 +474,24 @@ $("resize-grip").addEventListener("keydown", event => {
   }
 });
 let panelWidth;
+let fitFrame, previousFitHeight;
+function scheduleFit() {
+  if (fitFrame || $("panel").classList.contains("live-resizing")) return;
+  fitFrame = requestAnimationFrame(() => {
+    fitFrame = undefined;
+    if ($("panel").classList.contains("live-resizing")) return;
+    const height = Math.ceil($("panel").getBoundingClientRect().height);
+    if (height === previousFitHeight && Math.abs(innerHeight - height) <= 2) return;
+    previousFitHeight = height;
+    void api.resizePanel(height).catch(() => {});
+  });
+}
 new ResizeObserver(() => {
   const content = document.querySelector(".card-content");
   content.classList.toggle("fitted", content.scrollHeight <= content.clientHeight + 3);
   const width = $("panel").getBoundingClientRect().width;
   if (width !== panelWidth) { panelWidth = width; resizeSource(); }
-  void api
-    .resizePanel($("panel").getBoundingClientRect().height)
-    .catch(() => {});
+  scheduleFit();
 }).observe($("panel"));
 new ResizeObserver(() => {
   const content = document.querySelector(".card-content");
