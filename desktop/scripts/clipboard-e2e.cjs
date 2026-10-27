@@ -82,6 +82,6 @@ test('Native clipboard events, encryption, search, formats, pause and persistenc
   page=await show();await page.locator('#search').fill('persist');await expect(page.locator('.entry')).toHaveCount(1);await page.locator('#search').press('Control+Delete');await wait(async()=>(await query('persist')).total===0,'delete failed');
   await page.locator('#settings').click();const settings=application.windows().find(w=>w.url().endsWith('/settings.html'));await settings.locator('#clipboard-settings').waitFor({state:'visible'});
   await settings.locator('#clipboard-limit').selectOption('100');await wait(async()=>(await query('')).status.limit===100,'retention setting failed');
-  await settings.locator('#clear-clipboard').click();await wait(async()=>(await query('')).total===0,'clear failed');assert.equal((await fs.readdir(folder)).filter(f=>f.endsWith('.bin')).length,0);
+  await settings.locator('#clear-clipboard').click();await wait(async()=>(await query('')).total===0,'clear failed');await wait(async()=>(await fs.readdir(folder)).filter(f=>f.endsWith('.bin')).length===0,'cleared payloads were not removed');
 });
 

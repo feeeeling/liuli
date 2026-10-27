@@ -23,6 +23,7 @@ const { roundedRegion } = require("./window-appearance.cjs");
 const { WindowChrome } = require("./window-chrome.cjs");
 const { ClipboardHistory } = require("./clipboard-history.cjs");
 const { ClipboardWindow } = require("./clipboard-window.cjs");
+const { panelMenuTemplate } = require("./panel-menu.cjs");
 const windowChrome = process.platform === "win32" ? new WindowChrome({ packaged: app.isPackaged, resourcesPath: process.resourcesPath }) : null;
 module.exports.windowChrome = windowChrome;
 const { captureRegion, cancelCapture } = require("./screenshot.cjs");
@@ -471,7 +472,16 @@ function imagePayload(image) {
   return { imageBase64: png.toString("base64"), mimeType: "image/png" };
 }
 
+function popupPanelMenu(params = {}) {
+  const template = panelMenuTemplate({ editable: params.isEditable, selectedText: params.selectionText,
+    action: (action, value) => send(window, "command", { type: "panel-action", action, value }),
+    capture: action => void screenshotAction(action), settings: () => void showSettings(),
+    clipboard: () => invokeAction("clipboardHistory") });
+  Menu.buildFromTemplate(template).popup({ window });
+}
+
 function registerIPC() {
+  handle("panel-menu", () => popupPanelMenu(), ["panel"]);
   handle("state", () => state());
   handle("appearance", () => appearance(), ["panel", "settings", "clipboard"]);
   handle("clipboard-status", () => clipboardStatus(), ["panel", "settings", "clipboard"]);
@@ -606,7 +616,7 @@ function registerIPC() {
       broadcast("changed");
       return result;
     },
-    ["settings"],
+    ["settings", "panel"],
   );
   handle(
     "task",
@@ -854,6 +864,7 @@ else {
         if (preferences.hideOnBlur && !pinned && !panelDialogOpen && !panelGesture)
           window.hide();
       });
+      window.webContents.on("context-menu", (_event, params) => popupPanelMenu(params));
       window.on("moved", () => {
         clearTimeout(panelMoveTimer);
         if (window.isVisible() && !panelGesture) panelMoveTimer = setTimeout(() => {

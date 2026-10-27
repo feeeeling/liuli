@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld("liuli", {
   chooseWiki: () => call("choose-wiki"),
   health: () => call("health"),
   models: () => call("models"),
+  panelMenu: () => call("panel-menu"),
   providers: () => call("providers"),
   setModel: (id) => call("model", id),
   task: (task) => call("task", task),

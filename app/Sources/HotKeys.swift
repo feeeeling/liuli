@@ -9,6 +9,7 @@ enum HotKeyAction: String, CaseIterable, Identifiable {
     case formulaLatex
     case inputTranslate
     case silentOCR
+    case clipboardHistory
 
     var id: String { rawValue }
 
@@ -20,6 +21,7 @@ enum HotKeyAction: String, CaseIterable, Identifiable {
         case .formulaLatex: "公式转 LaTeX"
         case .inputTranslate: "输入翻译"
         case .silentOCR: "静默 OCR"
+        case .clipboardHistory: "剪贴板历史"
         }
     }
 
@@ -31,6 +33,7 @@ enum HotKeyAction: String, CaseIterable, Identifiable {
         case .formulaLatex: 4
         case .inputTranslate: 5
         case .silentOCR: 6
+        case .clipboardHistory: 7
         }
     }
 
@@ -42,6 +45,7 @@ enum HotKeyAction: String, CaseIterable, Identifiable {
         case .formulaLatex: KeyChord(keyCode: UInt32(kVK_ANSI_L), modifiers: UInt32(optionKey))
         case .inputTranslate: KeyChord(keyCode: UInt32(kVK_ANSI_A), modifiers: UInt32(optionKey))
         case .silentOCR: KeyChord(keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(optionKey))
+        case .clipboardHistory: KeyChord(keyCode: UInt32(kVK_ANSI_V), modifiers: UInt32(optionKey))
         }
     }
 }
@@ -184,6 +188,7 @@ final class HotKeyManager {
         case .formulaLatex: state.formulaToLatex()
         case .inputTranslate: state.inputTranslate()
         case .silentOCR: state.silentOCR()
+        case .clipboardHistory: state.showClipboardHistory()
         case .none: break
         }
     }

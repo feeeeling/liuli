@@ -13,12 +13,17 @@ let package = Package(
         .package(url: "https://github.com/mgriebling/SwiftMath.git", from: "1.7.3"),
     ],
     targets: [
+        .target(name: "ClipboardCore", path: "ClipboardCore"),
+        .target(name: "ClipboardMac", dependencies: ["ClipboardCore"], path: "ClipboardMac"),
         .executableTarget(
             name: "Liuli",
             dependencies: [
                 "SwiftMath",
+                "ClipboardCore",
+                "ClipboardMac",
             ],
             path: "Sources"
-        )
+        ),
+        .testTarget(name: "ClipboardCoreTests", dependencies: ["ClipboardCore", "ClipboardMac"], path: "Tests")
     ]
 )

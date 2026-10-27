@@ -1,0 +1,26 @@
+name: macOS client
+on:
+  push:
+    branches: [main]
+    paths: ['app/**', '.github/workflows/mac-ci.yml']
+  pull_request:
+    paths: ['app/**', '.github/workflows/mac-ci.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Test clipboard core and compile native UI
+        run: swift test --package-path app
+      - name: Build release client
+        run: swift build --package-path app -c release --product Liuli

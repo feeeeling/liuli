@@ -20,7 +20,7 @@ test(
     if (process.env.LIULI_E2E_EXECUTABLE) {
       const { extractFile } = await import("@electron/asar");
       const archive = path.join(path.dirname(process.env.LIULI_E2E_EXECUTABLE), "resources", "app.asar");
-      for (const file of ["clipboard-history.cjs", "clipboard-store.cjs", "clipboard-worker.cjs", "clipboard-window.cjs", "renderer/clipboard.html", "renderer/clipboard.js", "renderer/clipboard.css", "main.cjs", "preload.cjs", "selection.cjs", "panel-bounds.cjs", "window-appearance.cjs", "renderer/appearance.js", "renderer/panel.html", "renderer/panel.js",
+      for (const file of ["panel-menu.cjs", "clipboard-history.cjs", "clipboard-store.cjs", "clipboard-worker.cjs", "clipboard-window.cjs", "renderer/clipboard.html", "renderer/clipboard.js", "renderer/clipboard.css", "main.cjs", "preload.cjs", "selection.cjs", "panel-bounds.cjs", "window-appearance.cjs", "renderer/appearance.js", "renderer/panel.html", "renderer/panel.js",
         "renderer/panel.css", "renderer/settings.html", "renderer/settings.js", "renderer/settings.css", "renderer/common.css",
         "screenshot.cjs", "screen-capture.cjs", "capture-bounds.cjs", "capture-preload.cjs", "ocr.cjs", "window-chrome.cjs", "renderer/capture.html", "renderer/capture.js", "renderer/capture.css", "renderer/result-format.js", "renderer/vendor/katex/katex.min.js"]) {
         assert.ok(extractFile(archive, path.normalize(file)).equals(await fs.readFile(path.join(desktop, file))), `Packaged file is stale: ${file}`);
@@ -238,14 +238,20 @@ test(
         throw error;
       }
     };
-    const openModels = async () => {
-      await panel.locator("#model-label").click();
-      await settings.locator('[data-section="models"]').click();
+    const menuAction = async labels => {
+      await application.evaluate(({ Menu }, labels) => {
+        const original = Menu.prototype.popup;
+        Menu.prototype.popup = function() {
+          let menu = this, item;
+          for (const label of labels) { item = menu.items.find(item => item.label === label); if (!item) throw Error(`Missing menu item ${label}`); menu = item.submenu; }
+          item.click();
+        };
+        globalThis.restorePanelMenuPopup = () => { Menu.prototype.popup = original; };
+      }, labels);
+      try { await panel.evaluate(() => window.liuli.panelMenu()); }
+      finally { await application.evaluate(() => { restorePanelMenuPopup(); delete globalThis.restorePanelMenuPopup; }); }
     };
-    const openTools = async () => {
-      if (await panel.locator("#tools-content").isHidden()) await panel.locator("#tools-toggle").click();
-    };
-    const openSettings = async () => { await openTools(); await panel.locator("#settings").click(); };
+    const openSettings = () => menuAction(["设置…"]);
     assert.equal(
       await panelVisible(),
       false,
@@ -342,7 +348,7 @@ test(
       `floating card must have no native title bar (allowing DPI rounding): ${JSON.stringify(bounds)}`,
     );
     await assert.rejects(
-      panel.evaluate(() => window.liuli.setModel("liuli-test/text-only")),
+      panel.evaluate(() => window.liuli.login({ providerId: "openai", type: "api_key", apiKey: "not-allowed" })),
       /Invalid sender/,
     );
 
@@ -378,13 +384,14 @@ test(
       await application.evaluate(({ clipboard }) => clipboard.readText()),
       "你好，世界。",
     );
-    await panel.locator("#followup-toggle").click();
+    await panel.locator("#explain").click();
+    await panel.waitForFunction(() => !document.getElementById("followup-form").hidden && document.getElementById("stop").hidden);
     await panel.locator("#followup").fill("解释一下这个词");
     await panel.locator("#followup").press("Enter");
     await panel.waitForFunction(() => document.getElementById("stop").hidden);
-    assert.equal(requests.length, 2);
+    assert.equal(requests.length, 3);
     assert.ok(
-      requests[1].messages.some((message) => message.role === "assistant"),
+      requests[2].messages.some((message) => message.role === "assistant"),
     );
     await fs.mkdir(path.join(project, "dist", "qa"), { recursive: true });
     const suffix = process.env.LIULI_E2E_EXECUTABLE ? "packaged" : "source";
@@ -571,6 +578,7 @@ test(
 
     // Real window operations during a continuous drag: enable resizing once,
     // update bounds atomically, then restore its rounded region once on release.
+    await settlePanel();
     const beforeGesture = await application.evaluate(({ BrowserWindow, app }) => {
       const w = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html"));
       w.gestureCounts = {};
@@ -648,32 +656,25 @@ test(
       },
       path.join(project, "docs", "assets", "icon.png"),
     );
-    await openTools();
-    await panel.locator("#paste-image").click();
+    await menuAction(["粘贴图片"]);
     await panel.locator("#image-area").waitFor({ state: "visible" });
-    await openModels();
-    await waitPanel(false);
-    await settings.locator("#model").selectOption("liuli-test/text-only");
-    await settings.waitForFunction(
-      () => !document.getElementById("model").disabled,
-    );
+    await settings.evaluate(() => window.liuli.closeSettings());
+    await panel.locator("#model-label").selectOption("liuli-test/text-only");
     await panel.waitForFunction(
-      () => document.getElementById("model-label").textContent === "text-only",
+      () => document.getElementById("model-label").value === "liuli-test/text-only" && !document.getElementById("model-label").disabled,
     );
+    assert.equal(await application.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("settings.html")).isVisible()), false, "model selection must stay inside the panel");
+    assert.equal(await panelVisible(), true);
+    assert.equal(JSON.parse(await fs.readFile(path.join(home,"ui-profile","model.json"),"utf8")).id,"liuli-test/text-only");
     await openPanel();
     await panel.locator("#translate").click();
     assert.match(await panel.locator("#error").textContent(), /不支持图片/);
-    await openModels();
-    await settings.locator("#model").selectOption("liuli-test/vision");
-    await settings.waitForFunction(
-      () => !document.getElementById("model").disabled,
-    );
+    await panel.locator("#model-label").selectOption("liuli-test/vision");
     await panel.waitForFunction(
-      () => document.getElementById("model-label").textContent === "vision",
+      () => document.getElementById("model-label").value === "liuli-test/vision" && !document.getElementById("model-label").disabled,
     );
     await openPanel();
-    await openTools();
-    await panel.locator('[data-mode="ocr"]').click();
+    await menuAction(["处理方式", "OCR"]);
     await panel.locator("#translate").click();
     await panel.waitForFunction(
       () =>
@@ -828,8 +829,7 @@ test(
     await waitPanel(false);
     await openPanel();
     if (await panel.locator("#remove-image").isVisible()) await panel.locator("#remove-image").click();
-    await openTools();
-    await panel.locator('[data-mode="translate"]').click();
+    await menuAction(["处理方式", "翻译"]);
     await panel.locator("#source").fill("CANCEL_TEST");
     await panel.locator("#translate").click();
     await panel.waitForFunction(() =>

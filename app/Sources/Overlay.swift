@@ -242,7 +242,7 @@ private struct EditorChromeStripper: NSViewRepresentable {
     }
 }
 
-private func stripFocusChrome(_ view: NSView) {
+@MainActor private func stripFocusChrome(_ view: NSView) {
     view.focusRingType = .none
     if let scroll = view as? NSScrollView {
         scroll.borderType = .noBorder
