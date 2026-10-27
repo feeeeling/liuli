@@ -543,16 +543,18 @@ test(
     await panel.waitForFunction(() => document.getElementById("stop").hidden);
 
     // Dragging sets width and a height limit. Content keeps fitting automatically.
+    await settlePanel();
     await panel.locator("#resize-grip").press("Shift+ArrowRight");
     await panel.locator("#resize-grip").press("Shift+ArrowDown");
     await panel.evaluate(() => window.liuli.endPanelResize());
-    await panel.waitForFunction(() => document.getElementById("panel").classList.contains("user-sized") &&
+    await panel.waitForFunction(() => document.getElementById("panel").classList.contains("held-height") &&
       !document.getElementById("panel").classList.contains("live-resizing") && innerHeight < 340, null, { timeout: 5000 });
+    await settlePanel();
     const manual = await panel.evaluate(() => ({ width: innerWidth, height: innerHeight }));
     assert.ok(manual.width >= 465 && manual.height < 340, JSON.stringify(manual));
     const savedSize = JSON.parse(await fs.readFile(path.join(home, "ui-profile", "panel-size.json"), "utf8"));
     assert.ok(Math.abs(savedSize.width - manual.width) <= 4 && Math.abs(savedSize.height - manual.height) <= 4,
-      "resizing must retain the chosen height on release instead of snapping back");
+      "resizing must retain the chosen height on release instead of snapping back: " + JSON.stringify({ savedSize, manual }));
     await panel.locator("#source").fill("LONG_LAYOUT_TEST\n" + "A readable translation card. ".repeat(200));
     await panel.locator("#translate").click();
     await panel.waitForFunction(() => document.getElementById("result").textContent.length > 1000 && document.getElementById("stop").hidden);
