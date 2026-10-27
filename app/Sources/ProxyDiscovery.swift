@@ -15,7 +15,7 @@ enum ProxyDiscovery {
     }
 
     private static func systemProxyURL() -> String? {
-        guard let cf = CFNetworkCopySystemProxySettings() as? [String: Any] else { return nil }
+        guard let cf = CFNetworkCopySystemProxySettings()?.takeRetainedValue() as? [String: Any] else { return nil }
         if let https = enabledProxy(cf, enableKey: "HTTPSEnable", hostKey: "HTTPSProxy", portKey: "HTTPSPort") {
             return https
         }

@@ -578,6 +578,7 @@ test(
 
     // Real window operations during a continuous drag: enable resizing once,
     // update bounds atomically, then restore its rounded region once on release.
+    await settlePanel();
     const beforeGesture = await application.evaluate(({ BrowserWindow, app }) => {
       const w = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html"));
       w.gestureCounts = {};
