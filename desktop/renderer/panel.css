@@ -6,7 +6,8 @@ html, body { background: transparent; overflow: hidden; }
 .live-resizing { height: 100vh; max-height: none; }
 .card-content { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; }
 .card-content.fitted { overflow-y: hidden; }
-.panel-header { height: 22px; flex-shrink: 0; display: flex; justify-content: flex-end; align-items: center; gap: 8px; -webkit-app-region: drag; user-select: none; }
+.panel-header { height: 22px; flex-shrink: 0; display: flex; justify-content: flex-end; align-items: center; gap: 8px; -webkit-app-region: no-drag; user-select: none; cursor: grab; }
+.moving .panel-header { cursor: grabbing; }
 .icon-button, .inline-icon, .expand-button, .stop-button { display: inline-grid; place-items: center; border: 0; background: transparent; color: var(--secondary); padding: 0; border-radius: 50%; }
 .icon-button { width: 22px; height: 22px; }
 .icon-button svg { width: 13px; height: 13px; }

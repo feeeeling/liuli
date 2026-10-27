@@ -603,6 +603,19 @@ test(
     const pointerEnd = await panel.evaluate(() => ({ width: innerWidth, height: innerHeight }));
     assert.ok(Math.abs(pointerEnd.width - (pointerStart.width - 50)) <= 5, JSON.stringify({ pointerStart, pointerEnd }));
     assert.ok(Math.abs(pointerEnd.height - (pointerStart.height - 30)) <= 5, JSON.stringify({ pointerStart, pointerEnd }));
+    const moveStart = await application.evaluate(({ BrowserWindow, screen }) => {
+      const bounds = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html")).getBounds();
+      const area = screen.getDisplayMatching(bounds).workArea;
+      return { bounds, dx: bounds.x + bounds.width + 32 < area.x + area.width ? 20 : -20,
+        dy: bounds.y + bounds.height + 32 < area.y + area.height ? 20 : -20 };
+    });
+    await panel.evaluate(() => window.liuli.beginPanelResize("move", { x: 0, y: 0 }));
+    await panel.evaluate(({ dx, dy }) => window.liuli.dragPanelResize({ x: dx, y: dy }), moveStart);
+    await panel.evaluate(() => window.liuli.endPanelResize());
+    const moveEnd = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
+      .find(w => w.webContents.getURL().endsWith("panel.html")).getBounds());
+    assert.deepEqual(moveEnd, { ...moveStart.bounds, x: moveStart.bounds.x + moveStart.dx,
+      y: moveStart.bounds.y + moveStart.dy }, "moving the card must preserve its dimensions");
     await panel.locator("#source").fill("A new sentence after resizing.");
     await panel.waitForFunction(() => !document.getElementById("panel").classList.contains("held-height"));
 

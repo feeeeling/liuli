@@ -462,25 +462,42 @@ function registerIPC() {
   handle("close-settings", () => settingsWindow.close(), ["settings"]);
   handle("quit", () => app.quit(), ["settings"]);
   handle("panel-resize-start", (edge, cursor) => {
-    if (!["n", "s", "e", "w", "ne", "nw", "se", "sw"].includes(edge)) throw new Error("Invalid resize edge");
+    if (!["move", "n", "s", "e", "w", "ne", "nw", "se", "sw"].includes(edge)) throw new Error("Invalid resize edge");
     if (!cursor || ![cursor.x, cursor.y].every(value => Number.isFinite(value) && Math.abs(value) < 1e7)) return;
     panelGesture = { edge, cursor, bounds: window.getBounds(),
       area: screen.getDisplayMatching(window.getBounds()).workArea };
-    window.setResizable(true);
-    window.setShape([]);
-    panelShapeKey = undefined;
-    panelLayout({ maxHeight: heightLimit(manualPanelSize?.height, panelGesture.area), userSized: true, liveResize: true });
+    if (edge !== "move") {
+      window.setResizable(true);
+      window.setShape([]);
+      panelShapeKey = undefined;
+      panelLayout({ maxHeight: heightLimit(manualPanelSize?.height, panelGesture.area), userSized: true, liveResize: true });
+    }
   }, ["panel"]);
   handle("panel-resize-drag", (cursor) => {
     if (!panelGesture) return;
     if (!cursor || ![cursor.x, cursor.y].every(value => Number.isFinite(value) && Math.abs(value) < 1e7)) return;
     const { bounds, edge, area } = panelGesture;
+    if (edge === "move") {
+      const x = Math.round(bounds.x + cursor.x - panelGesture.cursor.x);
+      const y = Math.round(bounds.y + cursor.y - panelGesture.cursor.y);
+      const current = window.getBounds();
+      if (current.x !== x || current.y !== y) window.setPosition(x, y);
+      return;
+    }
     applyManualBounds(fromEdge(bounds, edge, { x: cursor.x - panelGesture.cursor.x, y: cursor.y - panelGesture.cursor.y }, area), area, /[ns]/.test(edge));
   }, ["panel"]);
   handle("panel-resize-end", () => {
     const gesture = panelGesture;
     panelGesture = undefined;
     if (gesture) {
+      if (gesture.edge === "move") {
+        const area = screen.getDisplayMatching(window.getBounds()).workArea;
+        fitPanel(area);
+        const b = window.getBounds(), next = constrain(b, area);
+        if (next.x !== b.x || next.y !== b.y) window.setPosition(next.x, next.y);
+        applyPanelShape();
+        return;
+      }
       window.setResizable(false);
       applyPanelShape();
       if (gesture.changed) panelLayout({ maxHeight: heightLimit(manualPanelSize?.height, gesture.area), userSized: true,

@@ -428,15 +428,18 @@ function flushDrag() {
     .finally(() => { resizeWriting = false; });
   return resizeWrite;
 }
-for (const handle of document.querySelectorAll("[data-resize]")) {
+for (const handle of document.querySelectorAll("[data-resize], .panel-header")) {
   handle.addEventListener("pointerdown", event => {
     if (event.button !== 0) return;
+    if (handle.classList.contains("panel-header") && event.target.closest("button")) return;
     event.preventDefault();
     resizePointer = event.pointerId;
     resizeGeneration++;
     handle.setPointerCapture(event.pointerId);
     resizePoint = undefined;
-    resizeWrite = api.beginPanelResize(handle.dataset.resize, { x: event.screenX, y: event.screenY }).catch(fail);
+    const edge = handle.dataset.resize || "move";
+    $("panel").classList.toggle("moving", edge === "move");
+    resizeWrite = api.beginPanelResize(edge, { x: event.screenX, y: event.screenY }).catch(fail);
   });
   handle.addEventListener("pointermove", event => {
     if (resizePointer === event.pointerId) {
@@ -456,6 +459,7 @@ for (const handle of document.querySelectorAll("[data-resize]")) {
     await flushDrag();
     if (generation !== resizeGeneration) return;
     await api.endPanelResize().catch(fail);
+    if (generation === resizeGeneration) $("panel").classList.remove("moving");
   };
   handle.addEventListener("pointerup", end);
   handle.addEventListener("pointercancel", end);
