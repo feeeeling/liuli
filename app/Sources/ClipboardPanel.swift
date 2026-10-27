@@ -53,13 +53,12 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate {
         previousApp = NSWorkspace.shared.frontmostApplication
         previousWindow = NSApp.keyWindow
         let panel = ensurePanel()
-        history.query = ""; history.isVisible = true
+        history.prepareToShow()
         let mouse = NSEvent.mouseLocation
         let visible = (NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
         panel.setFrameOrigin(NSPoint(x: min(max(mouse.x + 12, visible.minX + 12), visible.maxX - panel.frame.width - 12),
             y: min(max(mouse.y - panel.frame.height - 12, visible.minY + 12), visible.maxY - panel.frame.height - 12)))
         fit(); NSApp.activate(ignoringOtherApps: true); panel.makeKeyAndOrderFront(nil)
-        Task { await history.refresh(reset: true) }
     }
     private func fit() {
         guard let panel, history.isVisible else { return }

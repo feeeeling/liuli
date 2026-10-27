@@ -657,10 +657,14 @@ test(
     );
     await menuAction(["粘贴图片"]);
     await panel.locator("#image-area").waitFor({ state: "visible" });
+    await settings.evaluate(() => window.liuli.closeSettings());
     await panel.locator("#model-label").selectOption("liuli-test/text-only");
     await panel.waitForFunction(
       () => document.getElementById("model-label").value === "liuli-test/text-only" && !document.getElementById("model-label").disabled,
     );
+    assert.equal(await application.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("settings.html")).isVisible()), false, "model selection must stay inside the panel");
+    assert.equal(await panelVisible(), true);
+    assert.equal(JSON.parse(await fs.readFile(path.join(home,"ui-profile","model.json"),"utf8")).id,"liuli-test/text-only");
     await openPanel();
     await panel.locator("#translate").click();
     assert.match(await panel.locator("#error").textContent(), /不支持图片/);

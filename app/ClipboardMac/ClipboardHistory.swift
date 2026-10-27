@@ -111,6 +111,11 @@ public final class ClipboardHistory {
     public func beginInternalCopy() { suspended += 1 }
     public func endInternalCopy() { lastChange = pasteboard.changeCount; suspended = max(0, suspended - 1) }
     public func toggle() { onToggle?() }
+    public func prepareToShow() {
+        checkForChanges()
+        query = ""; isVisible = true
+        Task { await flush(); await refresh(reset: true) }
+    }
     public func dismiss(restore: Bool = true) { onDismiss?(restore) }
     public var status: String { !error.isEmpty ? error : "\(enabled && available ? "正在记录" : enabled ? "正在准备" : "已暂停") · \(count) 条" }
     public func setEnabled(_ value: Bool) {
@@ -174,8 +179,14 @@ public final class ClipboardHistory {
     public func copySelected(index: Int? = nil) async {
         guard !usingRecord, let archive else { return }
         usingRecord = true; defer { usingRecord = false }
-        // Resolve the current query even if Return arrives before the search task.
-        await refresh()
+        // A background refresh may overtake this search. Apply the query's own
+        // result here, then invalidate older refreshes before selecting a record.
+        let requestedQuery = query, requestedID = selectedID
+        let result = await archive.query(requestedQuery)
+        guard query == requestedQuery else { return }
+        searchGeneration += 1
+        records = result.records; totalMatches = result.total; count = result.count
+        selectedID = records.contains(where: { $0.id == requestedID }) ? requestedID : records.first?.id
         let id: UUID?
         if let index { id = records.indices.contains(index) ? records[index].id : nil } else { id = selectedID }
         guard let id else { return }

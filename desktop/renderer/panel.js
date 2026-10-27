@@ -8,7 +8,7 @@ let mode = "translate",
   hasResult = false;
 let followupOpen = false;
 let health = { ok: false };
-let configuringModel = false;
+let configuringModel = false, refreshGeneration = 0;
 let shared = {
   preferences: { targetLang: "zh", wikiRoot: "" },
   pinned: false,
@@ -53,21 +53,18 @@ function applyState(value) {
   const key = JSON.stringify(value.preferences);
   if (key !== preferencesKey) {
     $("target").value = value.preferences.targetLang;
-    for (const button of document.querySelectorAll("[data-capture]")) {
-      const shortcut = value.preferences.shortcuts?.[button.dataset.capture];
-      if (button.querySelector("kbd")) button.querySelector("kbd").textContent = shortcut || "";
-      else button.title = `截图翻译 · ${shortcut || ""}`;
-    }
     preferencesKey = key;
   }
   updateControls();
 }
 async function refresh() {
+  const generation = ++refreshGeneration;
   try {
-    health = await api.health();
+    const [currentHealth, catalog] = await Promise.all([api.health(), api.models()]);
+    if (generation !== refreshGeneration) return;
+    health = currentHealth;
     $("status").textContent = health.ok ? "已就绪" : "未登录";
     $("status").classList.toggle("ready", health.ok);
-    const catalog = await api.models();
     const select = $("model-label");
     select.replaceChildren();
     const groups = new Map();
@@ -80,6 +77,7 @@ async function refresh() {
     select.value = catalog.current || "";
     select.title = health.ok ? `${health.provider} / ${health.model} · 切换模型` : "选择模型或添加账号";
   } catch (error) {
+    if (generation !== refreshGeneration) return;
     fail(error);
     $("status").textContent = "连接失败";
   }
@@ -156,7 +154,7 @@ async function run(action = "task", text) {
     return;
   }
   if (action === "task" && image && !health.vision) {
-    message("error", "当前模型不支持图片，请在设置中选择视觉模型。");
+    message("error", "当前模型不支持图片，请切换到视觉模型。");
     return;
   }
   busy = true;
