@@ -15,3 +15,5 @@ runtime/
 *.xcuserstate
 .idea/
 Liuli-macos-arm64.zip
+desktop/native/bin/
+desktop/renderer/vendor/

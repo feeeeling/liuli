@@ -1,0 +1,53 @@
+const { contextBridge, ipcRenderer } = require("electron");
+
+const call = (name, ...args) => ipcRenderer.invoke(`liuli:${name}`, ...args);
+const subscribe = (name, callback) => {
+  const listener = (_event, value) => callback(value);
+  ipcRenderer.on(`liuli:${name}`, listener);
+  return () => ipcRenderer.removeListener(`liuli:${name}`, listener);
+};
+
+contextBridge.exposeInMainWorld("liuli", {
+  state: () => call("state"),
+  appearance: () => call("appearance"),
+  capture: (action) => call("capture", action),
+  history: () => call("history"),
+  restoreHistory: (id) => call("history-restore", id),
+  clearHistory: () => call("history-clear"),
+  onHistory: (callback) => subscribe("history", callback),
+  savePreferences: (patch) => call("preferences", patch),
+  showSettings: (section) => call("show-settings", section),
+  showPanel: () => call("show-panel"),
+  hidePanel: () => call("hide-panel"),
+  closeSettings: () => call("close-settings"),
+  quit: () => call("quit"),
+  resizePanel: (height) => call("resize-panel", height),
+  beginPanelResize: (edge, cursor) => call("panel-resize-start", edge, cursor),
+  dragPanelResize: (cursor) => call("panel-resize-drag", cursor),
+  endPanelResize: () => call("panel-resize-end"),
+  stepPanelResize: (dx, dy) => call("panel-resize-step", dx, dy),
+  chooseWiki: () => call("choose-wiki"),
+  health: () => call("health"),
+  models: () => call("models"),
+  providers: () => call("providers"),
+  setModel: (id) => call("model", id),
+  task: (task) => call("task", task),
+  abort: () => call("abort"),
+  login: (login) => call("login", login),
+  cancelLogin: () => call("cancel-login"),
+  answer: (id, value) => call("answer", id, value),
+  logout: (providerId) => call("logout", providerId),
+  chooseImage: () => call("choose-image"),
+  clipboardImage: () => call("clipboard-image"),
+  clipboardText: () => call("clipboard-text"),
+  copy: (text) => call("copy", text),
+  openExternal: (url) => call("open-external", url),
+  pin: (value) => call("pin", value),
+  onTask: (callback) => subscribe("task-event", callback),
+  onLogin: (callback) => subscribe("login-event", callback),
+  onCommand: (callback) => subscribe("command", callback),
+  onLayout: (callback) => subscribe("layout", callback),
+  onAppearance: (callback) => subscribe("appearance", callback),
+  onState: (callback) => subscribe("state", callback),
+  onChanged: (callback) => subscribe("changed", callback),
+});

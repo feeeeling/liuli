@@ -1,0 +1,51 @@
+html, body { height: 100%; background: var(--settings); }
+body { display: flex; flex-direction: column; font-size: 13px; }
+.settings-toolbar { flex-shrink: 0; border-bottom: 1px solid var(--line); background: var(--toolbar); padding: 9px 16px 8px; user-select: none; }
+nav { display: flex; justify-content: center; gap: 16px; }
+nav button { width: 68px; display: flex; flex-direction: column; align-items: center; gap: 5px; border: 0; border-radius: 8px; padding: 7px 6px 5px; background: transparent; color: var(--secondary); font-size: 11px; }
+nav button svg { width: 23px; height: 23px; stroke-width: 1.5; }
+nav button[aria-current="page"] { color: var(--accent); background: var(--hover); }
+main { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px; }
+main > section { max-width: 520px; margin: 0 auto; }
+.page-heading { display: none; }
+.settings-group { border: 1px solid var(--line); border-radius: 10px; background: var(--control); padding: 12px 16px; margin: 0 0 16px; }
+h2 { font-size: 11px; font-weight: 600; color: var(--secondary); margin: 0 0 7px; }
+.setting-row { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 9px 0; min-height: 40px; }
+.setting-row + .setting-row { border-top: 1px solid var(--line); }
+.setting-row p, .hint { font-size: 11px; color: var(--secondary); line-height: 1.65; margin: 4px 0 0; }
+.setting-row select { font-size: 12px; max-width: 142px; }
+.setting-value { white-space: nowrap; font-size: 11px; color: var(--secondary); }
+.setting-row input[type="checkbox"] { appearance: none; width: 30px; min-width: 30px; height: 18px; padding: 0; border: 0; background: #88888860; border-radius: 10px; cursor: pointer; position: relative; }
+.setting-row input[type="checkbox"]::before { content: ""; position: absolute; width: 14px; height: 14px; left: 2px; top: 2px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px #00000025; transition: transform .12s ease-out; }
+.setting-row input[type="checkbox"]:checked { background: var(--accent); }
+.setting-row input[type="checkbox"]:checked::before { transform: translateX(12px); }
+.field { font-size: 12px; display: flex; flex-direction: column; gap: 7px; margin: 10px 0; color: var(--text); }
+.field input, .field select { width: 100%; font-size: 12px; padding: 6px 8px; }
+.path-field { display: flex; gap: 6px; }
+.path-field input { flex: 1; min-width: 0; }
+.path-field button { flex-shrink: 0; font-size: 11px; }
+.save-state { font-size: 11px; color: var(--tertiary); margin: 4px 0; }
+.model-status { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; gap: 12px; }
+#status { font-size: 11px; color: var(--secondary); }
+.model-status button { font-size: 11px; }
+.login-actions { display: flex; gap: 8px; margin: 16px 0 8px; }
+.login-actions button { font-size: 12px; }
+.shortcut-recorder { width: 142px; text-align: center; font-size: 11px; font-family: "Cascadia Code", Consolas, monospace; cursor: pointer; padding: 6px; }
+.shortcut-recorder:focus { background: var(--subtle); }
+.group-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.group-actions button { font-size: 11px; }
+kbd { font-family: inherit; font-size: 11px; color: var(--secondary); background: var(--subtle); padding: 4px 7px; border: 1px solid var(--line); border-radius: 5px; }
+#login-links { display: flex; flex-direction: column; gap: 6px; }
+#login-links button { font-size: 11px; text-align: left; }
+#prompt-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+#prompt-label { width: 100%; font-size: 12px; }
+#prompt-value, #prompt-select { flex: 1; min-width: 0; }
+#login-state { white-space: pre-wrap; overflow-wrap: anywhere; }
+.settings-footer { flex-shrink: 0; min-height: 43px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 18px; border-top: 1px solid var(--line); font-size: 10px; color: var(--tertiary); }
+.settings-footer > div { display: flex; gap: 8px; align-items: center; }
+.settings-footer button { font-size: 11px; }
+.reduced-transparency .settings-group { background: var(--settings); }
+
+
+.history-entry { display: block; text-align: left; width: 100%; white-space: pre-wrap; font-size: 12px; margin: 6px 0; padding: 8px; }
+#history-list { max-height: 240px; overflow: auto; padding-top: 8px; }

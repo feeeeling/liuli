@@ -11,7 +11,7 @@ const MAX_HITS = 8;
 export function expandHome(input: string): string {
   const trimmed = input.trim();
   if (trimmed === "~") return os.homedir();
-  if (trimmed.startsWith("~/")) return path.join(os.homedir(), trimmed.slice(2));
+  if (/^~[\\/]/.test(trimmed)) return path.join(os.homedir(), trimmed.slice(2));
   return trimmed;
 }
 
@@ -19,8 +19,8 @@ export function resolveUnderWiki(root: string, rel: string): string {
   const base = path.resolve(expandHome(root));
   const cleaned = rel.replace(/\\/g, "/").replace(/^\/+/, "");
   const target = path.resolve(base, cleaned);
-  const prefix = base.endsWith(path.sep) ? base : base + path.sep;
-  if (target !== base && !target.startsWith(prefix)) {
+  const relative = path.relative(base, target);
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new Error("路径超出 wiki 目录");
   }
   return target;
@@ -40,7 +40,7 @@ function walkMarkdown(dir: string, acc: string[] = []): string[] {
     if (entry.isDirectory()) {
       if (entry.name === ".git" || entry.name === "raw") continue;
       walkMarkdown(full, acc);
-    } else if (entry.isFile() && entry.name.endsWith(".md")) {
+    } else if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) {
       acc.push(full);
     }
   }
@@ -78,7 +78,8 @@ export function searchWiki(root: string, query: string, limit = MAX_HITS): WikiH
     const score = scoreText(`${rel}\n${body.slice(0, 4000)}`, query);
     if (score <= 0) continue;
     const snippet = body
-      .replace(/^---[\s\S]*?---\n/, "")
+      .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "")
+      .replaceAll("\r\n", "\n")
       .trim()
       .slice(0, MAX_SNIPPET);
     hits.push({
@@ -94,7 +95,7 @@ export function searchWiki(root: string, query: string, limit = MAX_HITS): WikiH
 
 export function readWikiPage(root: string, rel: string): string {
   const file = resolveUnderWiki(root, rel);
-  if (!file.endsWith(".md")) throw new Error("只能阅读 .md 页面");
+  if (!file.toLowerCase().endsWith(".md")) throw new Error("只能阅读 .md 页面");
   if (!fs.existsSync(file)) throw new Error(`找不到 ${rel}`);
   const body = fs.readFileSync(file, "utf8");
   if (body.length <= MAX_READ) return body;

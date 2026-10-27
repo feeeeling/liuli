@@ -1,4 +1,5 @@
 import net from "node:net";
+import { detectWindowsProxy } from "./windows-proxy.ts";
 import {
   EnvHttpProxyAgent,
   fetch as undiciFetch,
@@ -70,10 +71,16 @@ export async function applyProxy(): Promise<void> {
     return;
   }
 
+  const systemProxy = await detectWindowsProxy();
+  if (systemProxy) {
+    apply(systemProxy, "Windows Internet Settings");
+    return;
+  }
+
   const ports = (process.env.LIULI_PROXY_PORTS || "7890,7897,1087,6152")
     .split(",")
     .map((p) => Number(p.trim()))
-    .filter((n) => n > 0);
+    .filter((n) => Number.isInteger(n) && n > 0 && n <= 65535);
   for (const port of ports) {
     if (await canConnect("127.0.0.1", port)) {
       apply(`http://127.0.0.1:${port}`, "local");
