@@ -11,7 +11,6 @@ private enum ClipboardKeychain {
             kSecAttrService as String: "app.liuli.desktop.clipboard", kSecAttrAccount as String: "aes-key-v1"]
         var query = identity
         query[kSecReturnData as String] = true; query[kSecMatchLimit as String] = kSecMatchLimitOne
-        query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         if status == errSecSuccess, let data = result as? Data, data.count == 32 { return data }
@@ -105,7 +104,7 @@ public final class ClipboardHistory {
                 timer.tolerance = 0.1; RunLoop.main.add(timer, forMode: .common); self.timer = timer
             }
             await refresh()
-        } catch { self.error = "剪贴板历史暂不可用，请解锁钥匙串后重新开启记录。" }
+        } catch { self.error = "剪贴板历史暂不可用，请检查钥匙串访问权限后重新开启记录。" }
     }
     public func stop() { timer?.invalidate(); timer = nil }
     public func flush() async { await pendingCapture?.value }
@@ -188,14 +187,14 @@ public final class ClipboardHistory {
             pasteboard.clearContents()
             guard pasteboard.writeObjects([item]) else { error = "剪贴板暂时被占用，请重试。"; return }
             error = ""; dismiss(); await refresh()
-        } catch { error = "这条记录无法读取，可能已被删除。" }
+        } catch { self.error = "这条记录无法读取，可能已被删除。" }
     }
     public func removeSelected() async {
         guard let selectedID else { return }
-        do { try await archive?.remove(selectedID); await refresh() } catch { error = "无法删除记录。" }
+        do { try await archive?.remove(selectedID); await refresh() } catch { self.error = "无法删除记录。" }
     }
     public func clear() async {
         generation += 1; await pendingCapture?.value
-        do { try await archive?.clear(); await refresh() } catch { error = "无法清空剪贴板历史。" }
+        do { try await archive?.clear(); await refresh() } catch { self.error = "无法清空剪贴板历史。" }
     }
 }
