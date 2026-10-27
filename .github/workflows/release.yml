@@ -7,9 +7,33 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install, verify and package Windows app
+        shell: powershell
+        run: |
+          ./scripts/desktop-windows.ps1 -Action Install
+          ./scripts/desktop-windows.ps1 -Action Check
+          ./scripts/desktop-windows.ps1 -Action Package
+          $env:LIULI_E2E_EXECUTABLE = (Resolve-Path ./dist/Liuli-win32-x64/Liuli.exe).Path
+          Push-Location desktop
+          npm run test:e2e
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged Windows smoke test failed.' }
+          Pop-Location
+          Compress-Archive -Path ./dist/Liuli-win32-x64 -DestinationPath ./Liuli-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Liuli-windows-x64
+          path: Liuli-windows-x64.zip
+          if-no-files-found: error
   macos-arm64:
     runs-on: macos-15
     steps:
@@ -26,10 +50,30 @@ jobs:
           scripts/vendor-node.sh
           make app
           ditto -c -k --keepParent dist/Liuli.app Liuli-macos-arm64.zip
-      - name: Upload release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Liuli-macos-arm64
+          path: Liuli-macos-arm64.zip
+          if-no-files-found: error
+  publish:
+    needs: [windows-x64, macos-arm64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Liuli-*
+          merge-multiple: true
+          path: release-assets
+      - name: Read release version
+        id: version
+        run: node -e "require('node:fs').appendFileSync(process.env.GITHUB_OUTPUT, 'tag=v' + require('./desktop/package.json').version + '\n')"
+      - name: Publish verified release
         uses: softprops/action-gh-release@v2
         with:
-          files: Liuli-macos-arm64.zip
-          generate_release_notes: true
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v0.0.{0}', github.run_number) }}
+          files: release-assets/*.zip
+          body_path: RELEASE_NOTES.md
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || steps.version.outputs.tag }}
           fail_on_unmatched_files: true

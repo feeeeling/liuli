@@ -1,0 +1,50 @@
+name: Windows desktop
+
+on:
+  push:
+    paths: ["desktop/**", "daemon/**", "scripts/*windows.ps1", ".github/workflows/desktop-ci.yml"]
+  pull_request:
+    paths: ["desktop/**", "daemon/**", "scripts/*windows.ps1", ".github/workflows/desktop-ci.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            daemon/package-lock.json
+            desktop/package-lock.json
+      - name: Install
+        shell: powershell
+        run: ./scripts/desktop-windows.ps1 -Action Install
+      - name: Verify source and daemon
+        shell: powershell
+        run: ./scripts/desktop-windows.ps1 -Action Check
+      - name: Package
+        shell: powershell
+        run: ./scripts/desktop-windows.ps1 -Action Package
+      - name: Verify packaged executable
+        shell: powershell
+        run: |
+          $env:LIULI_E2E_EXECUTABLE = (Resolve-Path ./dist/Liuli-win32-x64/Liuli.exe).Path
+          Set-Location desktop
+          npm run test:e2e
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged Windows smoke test failed.' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Liuli-windows-x64
+          path: dist/Liuli-win32-x64/
+          if-no-files-found: error

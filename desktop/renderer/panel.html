@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"/>
+  <title>琉璃 Liuli</title>
+  <link rel="stylesheet" href="common.css"/><link rel="stylesheet" href="panel.css"/>
+  <link rel="stylesheet" href="vendor/katex/katex.min.css"/>
+  <script defer src="vendor/katex/katex.min.js"></script><script defer src="result-format.js"></script>
+  <script defer src="appearance.js"></script><script defer src="panel.js"></script>
+</head>
+<body>
+<main id="panel" class="floating-card">
+  <header class="panel-header" aria-label="窗口操作">
+    <button id="pin" class="icon-button" aria-label="置顶" aria-pressed="false" title="钉住面板"><svg viewBox="0 0 24 24"><path d="m8 3 8 0-1 6 3 4v2H6v-2l3-4-1-6Zm4 12v6"/></svg></button>
+    <button id="hide-panel" class="icon-button" aria-label="收起卡片" title="关闭 · Esc"><svg viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg></button>
+  </header>
+  <div class="card-content">
+  <div id="tools-content" class="tools-content" hidden>
+    <nav id="modes" aria-label="处理方式"><button data-mode="translate" aria-pressed="true">翻译</button><button data-mode="ocr-translate" aria-pressed="false">图译</button><button data-mode="ocr" aria-pressed="false">OCR</button><button data-mode="latex" aria-pressed="false">LaTeX</button></nav>
+    <div class="capture-actions"><button data-capture="screenshot">截图翻译 <kbd>Alt S</kbd></button><button data-capture="ocr">截图 OCR <kbd>Alt ⇧ S</kbd></button><button data-capture="latex">公式转 LaTeX <kbd>Alt L</kbd></button><button data-capture="silent">静默 OCR <kbd>Alt C</kbd></button></div>
+    <div class="tool-actions"><button id="choose-image" class="text-button">选择图片</button><button id="paste-image" class="text-button" title="粘贴图片 · Ctrl+Shift+V">粘贴截图</button><button id="paste-text" class="text-button">粘贴文本</button><button id="clear" class="text-button">清空</button><button id="settings" class="text-button">设置…</button></div>
+  </div>
+  <section class="source-section" aria-label="原文">
+    <div class="section-heading">
+      <label for="source">原文</label>
+      <button id="copy-source" class="inline-icon" title="拷贝原文" aria-label="拷贝原文"><svg viewBox="0 0 16 16"><rect x="5" y="5" width="8" height="9" rx="1.4"/><path d="M10 5V2H2v9h3"/></svg></button>
+      <span id="source-count" class="visually-hidden"></span><span id="mode-label" class="mode-badge" hidden></span>
+      <button id="translate" class="submit-button" disabled title="开始处理 · Ctrl+Enter" aria-label="翻译"><svg viewBox="0 0 24 24"><path d="M12 18V6m-5 5 5-5 5 5"/></svg></button>
+    </div>
+    <textarea id="source" placeholder="输入或粘贴文字…" spellcheck="false" aria-label="原文" rows="1"></textarea>
+    <div id="image-area" hidden><img id="image-preview" alt="待处理图片"/><button id="remove-image" class="text-button">移除</button></div>
+  </section>
+  <p id="error" class="error" role="alert" hidden></p><p id="notice" class="notice" role="status" hidden></p>
+  <section id="result-section" class="result-section" aria-label="结果" hidden>
+    <div class="section-heading">
+      <span id="result-label">译文</span>
+      <button id="copy" class="inline-icon" title="拷贝译文" aria-label="复制" disabled><svg viewBox="0 0 16 16"><rect x="5" y="5" width="8" height="9" rx="1.4"/><path d="M10 5V2H2v9h3"/></svg></button>
+      <button id="retry" class="inline-icon" title="重试" aria-label="重试" disabled><svg viewBox="0 0 16 16"><path d="M12.5 5A5 5 0 1 0 13 10M12.5 1v4H8.5"/></svg></button>
+    </div>
+    <div id="formula-preview" aria-label="公式预览" hidden></div><p id="formula-hint" class="hint" hidden></p>
+    <div id="result" role="log" aria-live="polite"></div>
+    <div class="result-actions"><button id="explain" class="expand-button" title="简要解释，并可继续追问" aria-label="解释" disabled>›</button><button id="followup-toggle" class="inline-icon" title="继续追问" aria-label="追问" aria-expanded="false" disabled><svg viewBox="0 0 16 16"><path d="M3 2h10a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H7l-4 3v-3H2V3a1 1 0 0 1 1-1Z"/></svg></button></div>
+    <form id="followup-form" hidden><input id="followup" aria-label="追问" placeholder="继续追问" autocomplete="off"/><button id="ask" class="submit-button" aria-label="发送追问" title="发送"><svg viewBox="0 0 24 24"><path d="M12 18V6m-5 5 5-5 5 5"/></svg></button></form>
+  </section>
+  </div>
+  <footer>
+    <div class="quick-actions"><button id="tools-toggle" class="icon-button" title="更多操作" aria-label="更多操作" aria-expanded="false" aria-controls="tools-content"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button><button id="capture-quick" class="icon-button" aria-label="截图翻译" title="截图翻译 · Alt+S" data-capture="screenshot"><svg viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg></button></div>
+    <div class="footer-actions"><span id="status" role="status" class="visually-hidden">启动中</span><button id="stop" class="stop-button" hidden aria-label="停止生成" title="停止生成"><svg viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1"/></svg></button><select id="target" aria-label="目标语言"><option value="auto">自动</option><option value="zh">简体中文</option><option value="en">English</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="zh-TW">繁體中文</option></select><button id="model-label" class="model-link" title="到设置中切换模型">正在连接…</button></div>
+  </footer>
+  <div class="resize-edge resize-n" data-resize="n" aria-hidden="true"></div><div class="resize-edge resize-s" data-resize="s" aria-hidden="true"></div><div class="resize-edge resize-e" data-resize="e" aria-hidden="true"></div><div class="resize-edge resize-w" data-resize="w" aria-hidden="true"></div>
+  <div class="resize-corner resize-ne" data-resize="ne" aria-hidden="true"></div><div class="resize-corner resize-nw" data-resize="nw" aria-hidden="true"></div><div class="resize-corner resize-sw" data-resize="sw" aria-hidden="true"></div>
+  <button id="resize-grip" class="resize-corner resize-se" data-resize="se" aria-label="调整卡片大小" title="拖动调整大小 · 方向键微调"><svg viewBox="0 0 16 16"><path d="m6 12 6-6m-1 6 1-1"/></svg></button>
+</main>
+</body>
+</html>

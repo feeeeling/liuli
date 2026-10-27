@@ -69,7 +69,7 @@ except urllib.error.HTTPError as e:
     sys.exit(1)
 for asset in data.get("assets") or []:
     name = asset.get("name") or ""
-    if name.endswith(".zip") and "Liuli" in name:
+    if name.endswith(".zip") and "Liuli" in name and "windows" not in name.lower():
         print(asset["browser_download_url"])
         sys.exit(0)
 sys.exit(1)

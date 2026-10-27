@@ -1,5 +1,5 @@
 import http from "node:http";
-import { LiuliAgent } from "./agent.ts";
+import type { LiuliAgent } from "./agent.ts";
 import { isAuthKind, parseTask } from "./types.ts";
 
 const DEFAULT_PORT = 17891;
@@ -205,10 +205,15 @@ export function startServer(agent: LiuliAgent): http.Server {
           "X-Accel-Buffering": "no",
         });
 
+        res.flushHeaders();
+        res.socket?.setNoDelay(true);
+
         const close = () => {
           void agent.abort();
         };
-        req.on("close", close);
+        // The request has already ended after readBody(). Track the response
+        // so closing a client actually cancels its outstanding generation.
+        res.on("close", close);
 
         try {
           const text = await agent.run(task, {
@@ -220,7 +225,7 @@ export function startServer(agent: LiuliAgent): http.Server {
             message: error instanceof Error ? error.message : String(error),
           });
         } finally {
-          req.off("close", close);
+          res.off("close", close);
           res.end();
         }
         return;
@@ -240,8 +245,11 @@ export function startServer(agent: LiuliAgent): http.Server {
 
   server.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code === "EADDRINUSE") {
+      const inspect = process.platform === "win32"
+        ? `Get-NetTCPConnection -LocalPort ${port} -State Listen | Select-Object OwningProcess`
+        : `lsof -iTCP:${port} -sTCP:LISTEN`;
       console.error(
-        `[liuli] ${HOST}:${port} 已被占用。先停掉旧进程：lsof -iTCP:${port} -sTCP:LISTEN`,
+        `[liuli] ${HOST}:${port} 已被占用。查看占用进程：${inspect}；或设置 LIULI_PORT 更换端口。`,
       );
       process.exit(1);
     }
@@ -251,7 +259,8 @@ export function startServer(agent: LiuliAgent): http.Server {
 
   server.listen(port, HOST, () => {
     const health = agent.health();
-    console.log(`[liuli] http://${HOST}:${port}`);
+    const address = server.address() as import("node:net").AddressInfo;
+    console.log(`[liuli] http://${HOST}:${address.port}`);
     if (health.ok) {
       console.log(
         `[liuli] model ${health.provider}/${health.model} vision=${health.vision}`,

@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>琉璃 · 设置</title>
+    <link rel="stylesheet" href="common.css" />
+    <link rel="stylesheet" href="settings.css" />
+    <script defer src="appearance.js"></script>
+    <script defer src="settings.js"></script>
+  </head>
+  <body>
+    <header class="settings-toolbar">
+      <nav id="settings-nav" aria-label="设置分类">
+        <button data-section="general" aria-current="page">
+          <svg viewBox="0 0 24 24"><path d="m9 3 6 0 1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1 1-3Z"/><circle cx="12" cy="12" r="3"/></svg>通用</button
+        ><button data-section="shortcuts"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M5 9h1m3 0h1m3 0h1m3 0h1M5 12h1m3 0h1m3 0h1m3 0h1M7 16h10"/></svg>快捷键</button
+        ><button data-section="models"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3"/></svg>模型</button
+        ><button data-section="accounts"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="9" r="3"/><path d="M5 19c0-7 14-7 14 0"/></svg>账号</button>
+      </nav>
+    </header>
+    <main>
+      <p id="error" class="error" role="alert" hidden></p>
+      <p id="notice" class="notice" role="status" hidden></p>
+      <section data-page="general">
+        <div class="page-heading">
+          <h1>通用</h1>
+          <p>设置一次，翻译时只关注内容。</p>
+        </div>
+        <div class="settings-group">
+          <h2>外观</h2>
+          <div class="setting-row">
+            <div><label for="theme">主题</label><p>同时应用于设置窗口和悬浮卡片</p></div>
+            <select id="theme" aria-label="主题"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h2>翻译</h2>
+          <div class="setting-row">
+            <div>
+              <label for="default-target">默认目标语言</label>
+              <p>打开悬浮卡片时使用的语言</p>
+            </div>
+            <select id="default-target">
+              <option value="auto">自动</option><option value="zh">简体中文</option>
+              <option value="en">English</option>
+              <option value="ja">日本語</option>
+              <option value="ko">한국어</option>
+              <option value="fr">Français</option>
+              <option value="de">Deutsch</option>
+              <option value="zh-TW">繁體中文</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h2>悬浮卡片</h2>
+          <div class="setting-row">
+            <div>
+              <label for="hide-on-blur">切换到其他应用时收起</label>
+              <p>置顶后保持显示；Esc 随时收起卡片</p>
+            </div>
+            <input id="hide-on-blur" type="checkbox" role="switch" />
+          </div>
+          <div class="setting-row">
+            <div>
+              <span>打开位置</span>
+              <p>跟随鼠标所在屏幕，避免遮挡当前阅读位置</p>
+            </div>
+            <span class="setting-value">鼠标附近</span>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h2>追问上下文</h2>
+          <label class="field"
+            >本地 Wiki 目录
+            <div class="path-field">
+              <input
+                id="wiki-root"
+                placeholder="可选，留空则不检索本地文件"
+              /><button id="choose-wiki">选择…</button>
+            </div></label
+          >
+          <p class="hint">
+            解释和追问时，允许模型检索此目录下的 Markdown 页面。
+          </p>
+        </div>
+        <div class="settings-group"><h2>静默 OCR</h2><label class="setting-row"><div><span>用模型精修</span><p>先用 Windows 本地 OCR 复制，再用视觉模型精修</p></div><input id="enhance-silent" type="checkbox" role="switch"/></label></div>
+        <div class="settings-group"><h2>历史</h2><p class="hint">最近 40 条结果保存在本机，图片不保存。</p><details><summary>查看最近结果</summary><div id="history-list"></div></details><button id="clear-history" class="text-button">清空翻译历史</button></div>
+        <p id="save-state" class="save-state" role="status">
+          更改会自动保存到本机
+        </p>
+      </section>
+      <section data-page="models" hidden>
+        <div class="page-heading">
+          <h1>模型</h1>
+          <p>选择平时翻译使用的模型。</p>
+        </div>
+        <div class="settings-group">
+          <h2>当前模型</h2>
+          <label class="field"
+            >模型<select id="model" aria-label="当前模型" disabled>
+              <option value="">正在连接…</option>
+            </select></label
+          >
+          <div class="model-status">
+            <span id="status" role="status">正在启动…</span
+            ><button id="refresh">刷新模型列表</button>
+          </div>
+          <p id="catalog-warning" class="hint"></p>
+        </div>
+        <p class="hint">
+          「视觉」模型支持图片翻译、OCR
+          和公式识别。若账号不支持某个模型，请切换到可调用的型号。
+        </p>
+        <button id="go-accounts" class="text-button">管理供应商账号 →</button>
+      </section>
+      <section data-page="accounts" hidden>
+        <div class="page-heading">
+          <h1>账号</h1>
+          <p>与本机 Pi 共用登录状态。ChatGPT 订阅请选择 OpenAI Codex。</p>
+        </div>
+        <div class="settings-group">
+          <h2>供应商</h2>
+          <label class="field"
+            >供应商<select id="provider" aria-label="供应商"></select
+          ></label>
+          <p id="provider-state" class="hint"></p>
+          <label class="field"
+            >登录方式<select
+              id="auth-type"
+              aria-label="登录方式"
+            ></select></label
+          ><label id="key-field" class="field" hidden
+            >API Key<input
+              id="api-key"
+              type="password"
+              autocomplete="off"
+              placeholder="输入 API Key"
+          /></label>
+          <div class="login-actions">
+            <button id="login" class="primary">登录</button
+            ><button id="cancel-login" hidden>取消登录</button
+            ><button id="logout" disabled>退出此供应商</button>
+          </div>
+          <p id="login-state" class="hint" role="status"></p>
+          <div id="login-links"></div>
+          <form id="prompt-form" hidden>
+            <label id="prompt-label" for="prompt-value"></label
+            ><input id="prompt-value" autocomplete="off" /><select
+              id="prompt-select"
+              hidden
+            ></select
+            ><button class="primary">提交</button>
+          </form>
+          <p id="settings-error" class="error" role="alert" hidden></p>
+        </div>
+      </section>
+      <section data-page="shortcuts" hidden>
+        <div class="page-heading">
+          <h1>快捷键</h1>
+          <p>随时唤起卡片，留在当前工作流中。</p>
+        </div>
+        <div class="settings-group">
+          <h2>全局快捷键</h2>
+          <label class="setting-row"
+            ><div>
+              <span>输入翻译</span>
+              <p>打开无边框悬浮卡片</p>
+            </div>
+            <input
+              id="shortcut-input"
+              class="shortcut-recorder"
+              readonly
+              aria-label="输入翻译快捷键"
+              title="点击后按下新的组合键" /></label
+          ><label class="setting-row"
+            ><div>
+              <span>划词翻译</span>
+              <p>在其他应用中选中文字，直接按快捷键翻译</p>
+            </div>
+            <input
+              id="shortcut-clipboard"
+              class="shortcut-recorder"
+              readonly
+              aria-label="划词翻译快捷键"
+              title="点击后按下新的组合键"
+          /></label>
+          <label class="setting-row"><div><span>截图翻译</span><p>框选区域后直接识别并翻译</p></div><input id="shortcut-screenshot" class="shortcut-recorder" readonly aria-label="截图翻译快捷键" title="点击后按下新的组合键"/></label>
+          <label class="setting-row"><div><span>截图 OCR</span><p>框选区域后识别文字</p></div><input id="shortcut-ocr" class="shortcut-recorder" readonly aria-label="截图 OCR快捷键" title="点击后按下新的组合键"/></label>
+          <label class="setting-row"><div><span>公式转 LaTeX</span><p>框选公式，显示预览和可复制源码</p></div><input id="shortcut-latex" class="shortcut-recorder" readonly aria-label="公式转 LaTeX快捷键" title="点击后按下新的组合键"/></label>
+          <label class="setting-row"><div><span>静默 OCR</span><p>框选后复制文字，不弹出翻译卡片</p></div><input id="shortcut-silent" class="shortcut-recorder" readonly aria-label="静默 OCR快捷键" title="点击后按下新的组合键"/></label>
+          <div class="group-actions">
+            <button id="reset-shortcuts">恢复默认</button
+            ><button id="save-shortcuts" class="primary">保存快捷键</button>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h2>卡片内操作</h2>
+          <div class="setting-row">
+            <span>开始处理</span><kbd>Ctrl + Enter</kbd>
+          </div>
+          <div class="setting-row">
+            <span>粘贴截图</span><kbd>Ctrl + Shift + V</kbd>
+          </div>
+          <div class="setting-row"><span>收起卡片</span><kbd>Esc</kbd></div>
+        </div>
+        <p class="hint">截图快捷键会直接进入框选；Esc 或右键取消。也支持粘贴、选择图片。</p>
+      </section>
+    </main>
+    <footer class="settings-footer"><span>琉璃 · v0.2.2</span><div><button id="preview-panel">打开翻译卡片</button><button id="quit" class="text-button">退出琉璃</button></div></footer>
+  </body>
+</html>

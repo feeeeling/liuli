@@ -1,0 +1,29 @@
+{
+  "name": "liuli-desktop",
+  "version": "0.2.2",
+  "private": true,
+  "description": "Liuli desktop translation panel for Windows",
+  "author": "Liuli contributors",
+  "license": "MIT",
+  "main": "main.cjs",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "setup": "node node_modules/electron/install.js",
+    "build:native": "node scripts/build-native.cjs",
+    "prestart": "npm run build:native && npm run build:renderer",
+    "start": "electron .",
+    "test": "node --test test/*.test.cjs",
+    "pretest:e2e": "npm run build:native && npm run build:renderer",
+    "test:e2e": "node --test scripts/e2e.cjs",
+    "package": "node scripts/package.mjs",
+    "build:renderer": "node scripts/build-renderer.cjs"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "45.0.0",
+    "katex": "0.19.1",
+    "playwright": "1.64.1"
+  }
+}
