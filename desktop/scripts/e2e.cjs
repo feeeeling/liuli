@@ -668,6 +668,23 @@ test(
       const released = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html")).getBounds());
       for (const key of ["x","y","width","height"]) assert.ok(Math.abs(released[key]-start[key]) <= 2, `${edge}: release changed ${key}`);
     }
+    const nativeResize = await application.evaluate(({ BrowserWindow }) => {
+      const w = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html"));
+      const start = w.getBounds(), requested = { ...start, x:start.x+20, width:start.width-20 };
+      let prevented = false;
+      w.emit("will-resize", {preventDefault(){prevented=true;}}, requested, {edge:"left"});
+      if (!prevented) w.setBounds(requested);
+      return {start,requested};
+    });
+    await panel.waitForFunction(() => document.getElementById("panel").classList.contains("live-resizing"));
+    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html")).emit("resized"));
+    await panel.waitForFunction(() => document.getElementById("panel").classList.contains("held-height") && !document.getElementById("panel").classList.contains("live-resizing"));
+    await settlePanel();
+    const nativeEnd = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html")).getBounds());
+    assert.ok(Math.abs(nativeEnd.x+nativeEnd.width-nativeResize.start.x-nativeResize.start.width)<=2, "native resize must also fix the opposite edge");
+    assert.ok(Math.abs(nativeEnd.height-nativeResize.start.height)<=2, "native horizontal resize must retain height");
+    const nativeSaved = JSON.parse(await fs.readFile(path.join(home,"ui-profile","panel-size.json"),"utf8"));
+    assert.ok(Math.abs(nativeSaved.width-nativeEnd.width)<=2, "native resize must persist its preferred width");
     const pointerStart = await panel.evaluate(() => ({ width: innerWidth, height: innerHeight }));
     const grip = await panel.locator("#resize-grip").boundingBox();
     await panel.mouse.move(grip.x + 5, grip.y + 5);

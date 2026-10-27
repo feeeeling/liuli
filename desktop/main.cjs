@@ -178,6 +178,32 @@ function applyManualBounds(bounds, area, vertical = true) {
   }
 }
 
+function beginPanelGesture(edge, cursor, native = false) {
+  clearTimeout(panelMoveTimer);
+  panelGesture = { edge, cursor, native, bounds: window.getBounds(),
+    area: screen.getDisplayMatching(window.getBounds()).workArea };
+  if (edge !== "move") panelLayout({ maxHeight: heightLimit(manualPanelSize?.height, panelGesture.area), userSized: true, liveResize: true });
+}
+
+function endPanelGesture() {
+  const gesture = panelGesture;
+  panelGesture = undefined;
+  if (gesture) {
+    if (gesture.edge === "move") {
+      const area = screen.getDisplayMatching(window.getBounds()).workArea;
+      const b = window.getBounds(), next = constrain(b, area);
+      if (next.x !== b.x || next.y !== b.y) window.setPosition(next.x, next.y);
+      applyPanelShape();
+      return;
+    }
+    applyPanelShape();
+    if (gesture.changed) panelLayout({ maxHeight: heightLimit(manualPanelSize?.height, gesture.area), userSized: true,
+      liveResize: false, heldHeight: window.getBounds().height });
+    else fitPanel(gesture.area);
+  }
+  return persistPanelSize();
+}
+
 async function translateSelection() {
   if (capturingSelection) return;
   if (taskController || loginController) {
@@ -518,12 +544,7 @@ function registerIPC() {
   handle("panel-resize-start", (edge, cursor) => {
     if (!["move", "n", "s", "e", "w", "ne", "nw", "se", "sw"].includes(edge)) throw new Error("Invalid resize edge");
     if (!cursor || ![cursor.x, cursor.y].every(value => Number.isFinite(value) && Math.abs(value) < 1e7)) return;
-    clearTimeout(panelMoveTimer);
-    panelGesture = { edge, cursor, bounds: window.getBounds(),
-      area: screen.getDisplayMatching(window.getBounds()).workArea };
-    if (edge !== "move") {
-      panelLayout({ maxHeight: heightLimit(manualPanelSize?.height, panelGesture.area), userSized: true, liveResize: true });
-    }
+    beginPanelGesture(edge, cursor);
   }, ["panel"]);
   handle("panel-resize-drag", (cursor) => {
     if (!panelGesture) return;
@@ -538,24 +559,7 @@ function registerIPC() {
     }
     applyManualBounds(fromEdge(bounds, edge, { x: cursor.x - panelGesture.cursor.x, y: cursor.y - panelGesture.cursor.y }, area), area, /[ns]/.test(edge));
   }, ["panel"]);
-  handle("panel-resize-end", () => {
-    const gesture = panelGesture;
-    panelGesture = undefined;
-    if (gesture) {
-      if (gesture.edge === "move") {
-        const area = screen.getDisplayMatching(window.getBounds()).workArea;
-        const b = window.getBounds(), next = constrain(b, area);
-        if (next.x !== b.x || next.y !== b.y) window.setPosition(next.x, next.y);
-        applyPanelShape();
-        return;
-      }
-      applyPanelShape();
-      if (gesture.changed) panelLayout({ maxHeight: heightLimit(manualPanelSize?.height, gesture.area), userSized: true,
-        liveResize: false, heldHeight: window.getBounds().height });
-      else fitPanel(gesture.area);
-    }
-    return persistPanelSize();
-  }, ["panel"]);
+  handle("panel-resize-end", () => endPanelGesture(), ["panel"]);
   handle("panel-resize-step", (dx, dy) => {
     if (![dx, dy].every(value => Number.isFinite(value) && Math.abs(value) <= 50)) return;
     const bounds = window.getBounds();
@@ -821,7 +825,7 @@ else {
         title: "琉璃 Liuli",
         width: 420,
         height: 330,
-        minWidth: 320,
+        minWidth: 360,
         minHeight: 140,
         frame: false,
         transparent: true,
@@ -864,6 +868,26 @@ else {
         }, 100);
       });
       window.on("resize", applyPanelShape);
+      // Windows can take the outermost pixels before Chromium receives a
+      // pointer event. Treat that native sizing loop as the same gesture.
+      window.on("will-resize", (event, requested, details) => {
+        const edge = { top:"n", bottom:"s", left:"w", right:"e", "top-left":"nw", "top-right":"ne", "bottom-left":"sw", "bottom-right":"se" }[details.edge];
+        if (!edge) return;
+        if (panelGesture && !panelGesture.native) { event.preventDefault(); return; }
+        if (!panelGesture) beginPanelGesture(edge, undefined, true);
+        const { bounds, area } = panelGesture;
+        const delta = { x: edge.includes("w") ? requested.x - bounds.x : requested.x + requested.width - bounds.x - bounds.width,
+          y: edge.includes("n") ? requested.y - bounds.y : requested.y + requested.height - bounds.y - bounds.height };
+        const next = fromEdge(bounds, edge, delta, area);
+        panelGesture.changed = true;
+        manualPanelSize = { width: next.width, height: /[ns]/.test(edge) ? next.height : manualPanelSize?.height || 640 };
+        if (["x", "y", "width", "height"].some(key => next[key] !== requested[key])) {
+          event.preventDefault(); window.setBounds(next); applyPanelShape();
+        }
+      });
+      window.on("resized", () => {
+        if (panelGesture?.native) void Promise.resolve(endPanelGesture()).catch(error => console.error("[liuli] panel size:", error.message));
+      });
       window.on("show", applyPanelShape);
       screen.on("display-metrics-changed", () => fitPanel(screen.getDisplayMatching(window.getBounds()).workArea));
       window.on("close", (event) => {
