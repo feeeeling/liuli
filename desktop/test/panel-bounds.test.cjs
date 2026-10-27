@@ -27,3 +27,19 @@ test("dragging north/west edges keeps the opposite edge anchored even at minimum
   assert.equal(fromEdge({ ...start, height: 170 }, "e", { x: 80, y: 0 }, area).height, 170,
     "a horizontal drag must not force a compact card to a taller minimum");
 });
+
+test("every resize edge keeps untouched edges fixed at screen and size limits", () => {
+  const start = { x: -1500, y: 200, width: 500, height: 300 };
+  for (const edge of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {
+    for (const dx of [-10000, -50, 0, 50, 10000]) for (const dy of [-10000, -50, 0, 50, 10000]) {
+      const next = fromEdge(start, edge, { x: dx, y: dy }, area);
+      const right = b => b.x + b.width, bottom = b => b.y + b.height;
+      if (!edge.includes("w")) assert.equal(next.x, start.x, `${edge}: left`);
+      if (!edge.includes("e")) assert.equal(right(next), right(start), `${edge}: right`);
+      if (!edge.includes("n")) assert.equal(next.y, start.y, `${edge}: top`);
+      if (!edge.includes("s")) assert.equal(bottom(next), bottom(start), `${edge}: bottom`);
+      assert.ok(next.x >= area.x + 12 && right(next) <= area.x + area.width - 12);
+      assert.ok(next.y >= area.y + 12 && bottom(next) <= area.y + area.height - 12);
+    }
+  }
+});

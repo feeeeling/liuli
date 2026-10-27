@@ -32,7 +32,7 @@ async function selectModel(id) {
   await settings.waitForFunction(() => !document.getElementById("model").disabled);
   const health = await settings.evaluate(() => window.liuli.health());
   assert.equal(`${health.provider}/${health.model}`, id);
-  await panel.waitForFunction(model => document.getElementById("model-label").textContent === model, health.model);
+  await panel.waitForFunction(id => document.getElementById("model-label").value === id, `${health.provider}/${health.model}`);
 }
 async function finishTranslation(model) {
   await panel.waitForFunction(() => document.getElementById("stop").hidden &&

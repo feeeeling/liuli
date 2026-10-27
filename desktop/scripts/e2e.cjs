@@ -89,7 +89,8 @@ test(
         }
         const result = hasImage ? prompt.includes("数学公式") ? String.raw`$$\frac{x^{2}}{2}+\sqrt{y}=\sum_{i=1}^{n}i$$`
           : prompt.includes("<<<原文>>>") ? "<<<原文>>>\nHello world\n<<<译文>>>\n你好，世界。"
-          : "截图识别结果：Hello world" : prompt.includes("LONG_LAYOUT_TEST")
+          : "截图识别结果：Hello world" : prompt.includes("CHAT_SCROLL_TEST")
+          ? "这段回答会保留在对话里，可以向上滚动查看之前的问题与解释。\n\n".repeat(45) : prompt.includes("LONG_LAYOUT_TEST")
           ? "让语言成为一座桥梁。长篇译文保留舒适行距，在卡片内部滚动，按钮与底部状态始终可见。\n\n".repeat(35)
           : "你好，世界。";
         send({ role: "assistant", content: result.slice(0, 3) });
@@ -97,7 +98,7 @@ test(
           send({ content: result.slice(3) });
           send({}, "stop");
           res.end("data: [DONE]\n\n");
-        }, 30);
+        }, prompt.includes("CHAT_SLOW_TEST") ? 650 : 30);
       } catch (error) {
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: { message: error.message } }));
@@ -393,6 +394,25 @@ test(
     assert.ok(
       requests[2].messages.some((message) => message.role === "assistant"),
     );
+    assert.equal(await panel.locator("#primary-result").textContent(), "你好，世界。", "explaining and asking must retain the original translation");
+    assert.equal(await panel.locator(".chat-message.assistant").count(), 2);
+    assert.equal(await panel.locator(".chat-message.user").innerText(), "你\n解释一下这个词");
+    await panel.locator("#followup").fill("CHAT_SCROLL_TEST 请详细解释");
+    await panel.locator("#followup").press("Enter");
+    await panel.waitForFunction(() => document.getElementById("stop").hidden && document.querySelectorAll(".chat-message.assistant").length === 3);
+    await settlePanel();
+    assert.ok(await panel.locator("#result").evaluate(el => el.scrollHeight > el.clientHeight + 200), "conversation history must scroll within the finite panel");
+    const originalMessages = await panel.locator(".chat-text").allTextContents();
+    await panel.locator("#followup").fill("CHAT_SLOW_TEST 继续追问");
+    await panel.locator("#followup").press("Enter");
+    await panel.waitForFunction(() => !document.getElementById("stop").hidden && document.querySelector(".streaming-response")?.textContent.length > 0);
+    await panel.locator("#result").evaluate(el => { el.scrollTop = 0; });
+    await panel.waitForFunction(() => document.getElementById("stop").hidden);
+    assert.ok(await panel.locator("#result").evaluate(el => el.scrollTop < 5), "new tokens must not pull a reader away from older messages");
+    assert.deepEqual((await panel.locator(".chat-text").allTextContents()).slice(0, originalMessages.length), originalMessages);
+    assert.equal(await panel.locator(".chat-message.user").count(), 3);
+    assert.equal(await panel.locator(".chat-message.assistant").count(), 4);
+    assert.ok(await panel.locator("#followup").isVisible());
     await fs.mkdir(path.join(project, "dist", "qa"), { recursive: true });
     const suffix = process.env.LIULI_E2E_EXECUTABLE ? "packaged" : "source";
     await panel.screenshot({
@@ -438,7 +458,8 @@ test(
     const shortHeight = await panel.evaluate(() => innerHeight);
     assert.ok(shortHeight >= 180 && shortHeight <= 320, `Short card height: ${shortHeight}`);
     assert.equal(await panel.locator(".panel-brand, header img, #auto-size").count(), 0);
-    assert.equal(await panel.locator("#tools-content").isHidden(), true);
+    assert.equal(await panel.locator("#tools-content, #tools-toggle, #followup-toggle").count(), 0);
+    assert.equal(await panel.locator(".chat-message").count(), 0, "a new translation starts a fresh conversation");
     assert.deepEqual(await panel.evaluate(() => ({
       body: getComputedStyle(document.getElementById("source")).fontSize,
       result: getComputedStyle(document.getElementById("result")).fontSize,
@@ -576,8 +597,8 @@ test(
     assert.ok(Math.abs(await panel.evaluate(() => innerWidth) - manual.width) <= 4, "auto fitting must preserve the user's preferred width");
     await assert.rejects(settings.evaluate(() => window.liuli.stepPanelResize(50, 50)), /Invalid sender/);
 
-    // Real window operations during a continuous drag: enable resizing once,
-    // update bounds atomically, then restore its rounded region once on release.
+    // Real window operations keep the same native style and rounded region
+    // throughout the gesture, including before release.
     await settlePanel();
     const beforeGesture = await application.evaluate(({ BrowserWindow, app }) => {
       const w = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html"));
@@ -586,6 +607,8 @@ test(
       for (const name of ["setResizable", "setBounds", "setPosition", "setShape"]) {
         w.gestureOriginals[name] = w[name];
         w[name] = function(...args) {
+          if (name === "setShape" && args[0].length === 0) throw new Error("A live gesture must never clear its rounded region");
+          if (name === "setShape") this.gestureShape = args[0];
           this.gestureCounts[name] = (this.gestureCounts[name] || 0) + 1;
           return this.gestureOriginals[name].apply(this, args);
         };
@@ -597,7 +620,17 @@ test(
       return w.getBounds();
     });
     await panel.evaluate(() => window.liuli.beginPanelResize("e", { x: 0, y: 0 }));
-    for (let i = 1; i <= 40; i++) await panel.evaluate(x => window.liuli.dragPanelResize({ x, y: 0 }), i * 2);
+    for (let i = 1; i <= 40; i++) {
+      await panel.evaluate(x => window.liuli.dragPanelResize({ x, y: 0 }), i * 2);
+      const frame = await application.evaluate(({ BrowserWindow }) => {
+        const w = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html"));
+        const b = w.getBounds(), shape = w.gestureShape;
+        const contains = (x,y) => shape.some(r => x >= r.x && y >= r.y && x < r.x+r.width && y < r.y+r.height);
+        return { bounds:b, rounded: !contains(0,0) && !contains(b.width-1,0) && !contains(0,b.height-1) && !contains(b.width-1,b.height-1) };
+      });
+      assert.ok(frame.rounded, "all four corners must remain clipped during resizing");
+      for (const key of ["x", "y", "height"]) assert.ok(Math.abs(frame.bounds[key] - beforeGesture[key]) <= 2, `east drag moved untouched ${key}`);
+    }
     const duringGesture = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
       .find(w => w.webContents.getURL().endsWith("panel.html")).getBounds());
     assert.ok(Math.abs(duringGesture.height - beforeGesture.height) <= 4, "horizontal resizing must not jump in height");
@@ -607,16 +640,51 @@ test(
       const chrome = process.mainModule.require(`${app.getAppPath()}/main.cjs`).windowChrome;
       const stats = { ...w.gestureCounts, round: chrome.gestureRounds };
       for (const name in w.gestureOriginals) w[name] = w.gestureOriginals[name];
-      delete w.gestureOriginals; delete w.gestureCounts;
+      delete w.gestureOriginals; delete w.gestureCounts; delete w.gestureShape;
       chrome.round = chrome.gestureOriginal;
       delete chrome.gestureOriginal; delete chrome.gestureRounds;
       return stats;
     });
     t.diagnostic(`40 drag updates: ${JSON.stringify(gestureStats)}`);
-    assert.ok(gestureStats.setResizable <= 2 && gestureStats.round <= 2, JSON.stringify(gestureStats));
+    assert.equal(gestureStats.setResizable || 0, 0, "do not toggle native frame geometry during resizing");
+    assert.ok(gestureStats.round >= 1 && gestureStats.round <= 42, JSON.stringify(gestureStats));
     assert.equal(gestureStats.setPosition || 0, 0, "bounds must update atomically instead of moving and resizing separately");
     assert.ok(Math.abs(duringGesture.width - beforeGesture.width - 80) <= 4);
     await settlePanel();
+    for (const edge of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {
+      const start = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html")).getBounds());
+      await panel.evaluate(edge => window.liuli.beginPanelResize(edge, {x:0,y:0}), edge);
+      for (const distance of [-10000, -25, 25, 10000, 0]) {
+        await panel.evaluate(distance => window.liuli.dragPanelResize({x:distance,y:distance}), distance);
+        const next = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html")).getBounds());
+        const near = (a,b,label) => assert.ok(Math.abs(a-b) <= 2, `${edge}: ${label} shifted: ${JSON.stringify({start,next})}`);
+        if (!edge.includes("w")) near(next.x,start.x,"left");
+        if (!edge.includes("e")) near(next.x+next.width,start.x+start.width,"right");
+        if (!edge.includes("n")) near(next.y,start.y,"top");
+        if (!edge.includes("s")) near(next.y+next.height,start.y+start.height,"bottom");
+      }
+      await panel.evaluate(() => window.liuli.endPanelResize());
+      await settlePanel();
+      const released = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html")).getBounds());
+      for (const key of ["x","y","width","height"]) assert.ok(Math.abs(released[key]-start[key]) <= 2, `${edge}: release changed ${key}`);
+    }
+    const nativeResize = await application.evaluate(({ BrowserWindow }) => {
+      const w = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html"));
+      const start = w.getBounds(), requested = { ...start, x:start.x+20, width:start.width-20 };
+      let prevented = false;
+      w.emit("will-resize", {preventDefault(){prevented=true;}}, requested, {edge:"left"});
+      if (!prevented) w.setBounds(requested);
+      return {start,requested};
+    });
+    await panel.waitForFunction(() => document.getElementById("panel").classList.contains("live-resizing"));
+    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html")).emit("resized"));
+    await panel.waitForFunction(() => document.getElementById("panel").classList.contains("held-height") && !document.getElementById("panel").classList.contains("live-resizing"));
+    await settlePanel();
+    const nativeEnd = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html")).getBounds());
+    assert.ok(Math.abs(nativeEnd.x+nativeEnd.width-nativeResize.start.x-nativeResize.start.width)<=2, "native resize must also fix the opposite edge");
+    assert.ok(Math.abs(nativeEnd.height-nativeResize.start.height)<=2, "native horizontal resize must retain height");
+    const nativeSaved = JSON.parse(await fs.readFile(path.join(home,"ui-profile","panel-size.json"),"utf8"));
+    assert.ok(Math.abs(nativeSaved.width-nativeEnd.width)<=2, "native resize must persist its preferred width");
     const pointerStart = await panel.evaluate(() => ({ width: innerWidth, height: innerHeight }));
     const grip = await panel.locator("#resize-grip").boundingBox();
     await panel.mouse.move(grip.x + 5, grip.y + 5);
