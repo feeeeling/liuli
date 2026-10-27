@@ -1,6 +1,6 @@
 {
   "name": "liuli-desktop",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "private": true,
   "description": "Liuli desktop translation panel for Windows",
   "author": "Liuli contributors",
@@ -16,7 +16,7 @@
     "start": "electron .",
     "test": "node --test test/*.test.cjs",
     "pretest:e2e": "npm run build:native && npm run build:renderer",
-    "test:e2e": "node --test scripts/e2e.cjs",
+    "test:e2e": "node --test --test-concurrency=1 scripts/e2e.cjs scripts/clipboard-e2e.cjs",
     "package": "node scripts/package.mjs",
     "build:renderer": "node scripts/build-renderer.cjs"
   },

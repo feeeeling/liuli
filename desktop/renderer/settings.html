@@ -34,7 +34,7 @@
         <div class="settings-group">
           <h2>外观</h2>
           <div class="setting-row">
-            <div><label for="theme">主题</label><p>同时应用于设置窗口和悬浮卡片</p></div>
+            <div><label for="theme">主题</label><p>应用于设置、翻译卡片和剪贴板历史</p></div>
             <select id="theme" aria-label="主题"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
           </div>
         </div>
@@ -72,6 +72,13 @@
             </div>
             <span class="setting-value">鼠标附近</span>
           </div>
+        </div>
+        <div id="clipboard-settings" class="settings-group">
+          <h2>剪贴板</h2>
+          <label class="setting-row"><div><span>记录复制历史</span><p>文字和图片仅加密保存在本机，不发送给模型</p></div><input id="clipboard-enabled" type="checkbox" role="switch"/></label>
+          <div class="setting-row"><div><label for="clipboard-limit">保留记录</label><p>达到上限后自动移除最早的记录</p></div><select id="clipboard-limit"><option value="100">100 条</option><option value="500">500 条</option><option value="1000">1000 条</option></select></div>
+          <p id="clipboard-state" class="hint" role="status"></p>
+          <div class="group-actions"><button id="clear-clipboard" class="text-button">清空剪贴板历史</button><button id="open-clipboard">打开剪贴板历史</button></div>
         </div>
         <div class="settings-group">
           <h2>追问上下文</h2>
@@ -193,6 +200,7 @@
           <label class="setting-row"><div><span>截图 OCR</span><p>框选区域后识别文字</p></div><input id="shortcut-ocr" class="shortcut-recorder" readonly aria-label="截图 OCR快捷键" title="点击后按下新的组合键"/></label>
           <label class="setting-row"><div><span>公式转 LaTeX</span><p>框选公式，显示预览和可复制源码</p></div><input id="shortcut-latex" class="shortcut-recorder" readonly aria-label="公式转 LaTeX快捷键" title="点击后按下新的组合键"/></label>
           <label class="setting-row"><div><span>静默 OCR</span><p>框选后复制文字，不弹出翻译卡片</p></div><input id="shortcut-silent" class="shortcut-recorder" readonly aria-label="静默 OCR快捷键" title="点击后按下新的组合键"/></label>
+          <label class="setting-row"><div><span>剪贴板历史</span><p>搜索复制过的文字和图片</p></div><input id="shortcut-clipboardHistory" class="shortcut-recorder" readonly aria-label="剪贴板历史快捷键" title="点击后按下新的组合键"/></label>
           <div class="group-actions">
             <button id="reset-shortcuts">恢复默认</button
             ><button id="save-shortcuts" class="primary">保存快捷键</button>
@@ -211,6 +219,6 @@
         <p class="hint">截图快捷键会直接进入框选；Esc 或右键取消。也支持粘贴、选择图片。</p>
       </section>
     </main>
-    <footer class="settings-footer"><span>琉璃 · v0.2.4</span><div><button id="preview-panel">打开翻译卡片</button><button id="quit" class="text-button">退出琉璃</button></div></footer>
+    <footer class="settings-footer"><span>琉璃 · v0.3.0</span><div><button id="preview-panel">打开翻译卡片</button><button id="quit" class="text-button">退出琉璃</button></div></footer>
   </body>
 </html>

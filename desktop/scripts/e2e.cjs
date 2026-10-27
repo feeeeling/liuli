@@ -6,6 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const { _electron: electron } = require("playwright");
+const { closeElectron } = require("./electron-test.cjs");
 
 const desktop = path.resolve(__dirname, "..");
 const project = path.resolve(desktop, "..");
@@ -19,11 +20,12 @@ test(
     if (process.env.LIULI_E2E_EXECUTABLE) {
       const { extractFile } = await import("@electron/asar");
       const archive = path.join(path.dirname(process.env.LIULI_E2E_EXECUTABLE), "resources", "app.asar");
-      for (const file of ["main.cjs", "preload.cjs", "selection.cjs", "panel-bounds.cjs", "window-appearance.cjs", "renderer/appearance.js", "renderer/panel.html", "renderer/panel.js",
+      for (const file of ["clipboard-history.cjs", "clipboard-store.cjs", "clipboard-worker.cjs", "clipboard-window.cjs", "renderer/clipboard.html", "renderer/clipboard.js", "renderer/clipboard.css", "main.cjs", "preload.cjs", "selection.cjs", "panel-bounds.cjs", "window-appearance.cjs", "renderer/appearance.js", "renderer/panel.html", "renderer/panel.js",
         "renderer/panel.css", "renderer/settings.html", "renderer/settings.js", "renderer/settings.css", "renderer/common.css",
         "screenshot.cjs", "screen-capture.cjs", "capture-bounds.cjs", "capture-preload.cjs", "ocr.cjs", "window-chrome.cjs", "renderer/capture.html", "renderer/capture.js", "renderer/capture.css", "renderer/result-format.js", "renderer/vendor/katex/katex.min.js"]) {
         assert.ok(extractFile(archive, path.normalize(file)).equals(await fs.readFile(path.join(desktop, file))), `Packaged file is stale: ${file}`);
       }
+      assert.ok((await fs.stat(path.join(path.dirname(archive), "ClipboardMonitor.exe"))).size > 0);
       assert.ok((await fs.stat(path.join(path.dirname(archive), "SelectionCapture.exe"))).size > 0);
       assert.ok((await fs.stat(path.join(path.dirname(archive), "WindowChrome.exe"))).size > 0);
       assert.ok((await fs.stat(path.join(path.dirname(archive), "ScreenCapture.exe"))).size > 0);
@@ -130,6 +132,7 @@ test(
       LIULI_USER_DATA_DIR: path.join(home, "ui-profile"),
       PI_CODING_AGENT_DIR: agentDir,
       PI_OFFLINE: "1",
+      LIULI_CLIPBOARD_MONITOR: "0",
       ELECTRON_ENABLE_LOGGING: "1",
       LIULI_MODEL: "liuli-test/vision",
       LIULI_PROXY_PORTS: "0",
@@ -143,12 +146,12 @@ test(
         targetLang: "zh",
         hideOnBlur: true,
         wikiRoot: "",
-        shortcuts: { input: "Control+Alt+F11", clipboard: "Control+Alt+F12", screenshot: "Control+Alt+F1", ocr: "Control+Alt+F2", latex: "Control+Alt+F3", silent: "Control+Alt+F4" },
+        shortcuts: { input: "Control+Alt+F11", clipboard: "Control+Alt+F12", screenshot: "Control+Alt+F1", ocr: "Control+Alt+F2", latex: "Control+Alt+F3", silent: "Control+Alt+F4", clipboardHistory: "Control+Alt+F5" },
       }),
     );
     let application;
     t.after(async () => {
-      if (application) await application.close().catch(() => {});
+      if (application) await closeElectron(application);
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));
       await fs.rm(home, { recursive: true, force: true });
@@ -217,6 +220,18 @@ test(
     const settlePanel = async () => {
       try {
         await panel.waitForFunction(() => Math.abs(document.getElementById("panel").getBoundingClientRect().height - innerHeight) <= 4, null, { timeout: 4000 });
+        // Content fitting crosses renderer RAF and main-process IPC. A matching
+        // intermediate frame does not yet make the resize grip's coordinates stable.
+        await panel.evaluate(() => new Promise(resolve => {
+          let previous, stable = 0;
+          const frame = () => {
+            const key = `${innerWidth}:${innerHeight}:${document.getElementById("panel").getBoundingClientRect().height}`;
+            stable = key === previous ? stable + 1 : 0;
+            previous = key;
+            if (stable >= 6) resolve(); else requestAnimationFrame(frame);
+          };
+          requestAnimationFrame(frame);
+        }));
       } catch (error) {
         t.diagnostic(JSON.stringify(await panel.evaluate(() => ({ width: innerWidth, height: innerHeight, max: getComputedStyle(document.documentElement).getPropertyValue("--panel-max-height"), elements: [...document.querySelectorAll("#panel, .source-section, #source, #result-section, #result, #followup-form, footer")].map(el => ({ id: el.id || el.className || el.tagName, height: el.getBoundingClientRect().height, display: getComputedStyle(el).display })) }))));
         t.diagnostic(JSON.stringify(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map(w => ({title:w.getTitle(), bounds:w.getBounds(), content:w.getContentBounds(), min:w.getMinimumSize()})))));
@@ -280,7 +295,7 @@ test(
     await settings.locator("#shortcut-input").press("Control+Alt+F9");
     await settings.locator("#save-shortcuts").click();
     await settings.waitForFunction(
-      () => document.getElementById("notice").textContent === "设置已保存。",
+      async () => (await window.liuli.state()).preferences.shortcuts.input === "Control+Alt+F9",
     );
     assert.equal(
       await application.evaluate(({ globalShortcut }) =>
@@ -528,16 +543,18 @@ test(
     await panel.waitForFunction(() => document.getElementById("stop").hidden);
 
     // Dragging sets width and a height limit. Content keeps fitting automatically.
+    await settlePanel();
     await panel.locator("#resize-grip").press("Shift+ArrowRight");
     await panel.locator("#resize-grip").press("Shift+ArrowDown");
     await panel.evaluate(() => window.liuli.endPanelResize());
-    await panel.waitForFunction(() => document.getElementById("panel").classList.contains("user-sized") &&
+    await panel.waitForFunction(() => document.getElementById("panel").classList.contains("held-height") &&
       !document.getElementById("panel").classList.contains("live-resizing") && innerHeight < 340, null, { timeout: 5000 });
+    await settlePanel();
     const manual = await panel.evaluate(() => ({ width: innerWidth, height: innerHeight }));
     assert.ok(manual.width >= 465 && manual.height < 340, JSON.stringify(manual));
     const savedSize = JSON.parse(await fs.readFile(path.join(home, "ui-profile", "panel-size.json"), "utf8"));
     assert.ok(Math.abs(savedSize.width - manual.width) <= 4 && Math.abs(savedSize.height - manual.height) <= 4,
-      "resizing must retain the chosen height on release instead of snapping back");
+      "resizing must retain the chosen height on release instead of snapping back: " + JSON.stringify({ savedSize, manual }));
     await panel.locator("#source").fill("LONG_LAYOUT_TEST\n" + "A readable translation card. ".repeat(200));
     await panel.locator("#translate").click();
     await panel.waitForFunction(() => document.getElementById("result").textContent.length > 1000 && document.getElementById("stop").hidden);
@@ -761,12 +778,16 @@ test(
     const beforeSilent = requests.length;
     overlay = await beginCapture("silent");
     await selectFixture(overlay);
-    if (localOCRAvailable) assert.match(await application.evaluate(({ clipboard }) => clipboard.readText()), /Hello\s*world/i);
+    if (localOCRAvailable) {
+      await panel.waitForFunction(() => window.liuli.clipboardText().then(text => /Hello\s*world/i.test(text)), undefined, { timeout: 5000 });
+      assert.match(await application.evaluate(({ clipboard }) => clipboard.readText()), /Hello\s*world/i);
+    }
     assert.equal(requests.length, beforeSilent, "local-only silent OCR must work without a model call");
     assert.equal(await panelVisible(), false);
     await settings.evaluate(() => window.liuli.savePreferences({ enhanceSilentOCR: true }));
     overlay = await beginCapture("silent");
     await selectFixture(overlay);
+    await panel.waitForFunction(() => window.liuli.clipboardText().then(text => text === "截图识别结果：Hello world"), undefined, { timeout: 5000 });
     assert.equal(await application.evaluate(({ clipboard }) => clipboard.readText()), "截图识别结果：Hello world");
     assert.equal(await panelVisible(), false);
     const entries = await settings.evaluate(() => window.liuli.history());
@@ -776,6 +797,7 @@ test(
     raceClipboard = true;
     overlay = await beginCapture("silent");
     await selectFixture(overlay);
+    await panel.waitForFunction(() => window.liuli.clipboardText().then(text => text === "new user clipboard"), undefined, { timeout: 5000 });
     assert.equal(await application.evaluate(({ clipboard }) => clipboard.readText()), "new user clipboard", "model refinement must not overwrite a later user copy");
     await settings.evaluate(id => window.liuli.restoreHistory(id), entries.find(item => item.mode === "latex").id);
     await panel.waitForFunction(() => document.querySelector("#formula-preview .katex"));
@@ -859,7 +881,7 @@ test(
     const chromePid = await application.evaluate(({ app }) => process.mainModule.require(`${app.getAppPath()}/main.cjs`).windowChrome?.child?.pid);
     assert.ok(chromePid);
     assert.deepEqual(rendererErrors, []);
-    await application.close();
+    assert.equal(await closeElectron(application), true, "Electron should exit gracefully");
     application = undefined;
     assert.throws(() => process.kill(daemonPid, 0), /ESRCH/);
     assert.throws(() => process.kill(chromePid, 0), /ESRCH/);
@@ -876,6 +898,7 @@ test(
     await settings.waitForFunction(() => document.getElementById("theme").value === "light");
     for (const page of [settings, panel]) await page.waitForFunction(() => document.documentElement.dataset.appearance === "light");
     assert.equal(await application.evaluate(({ nativeTheme }) => nativeTheme.themeSource), "light");
-    await application.close();
+    assert.equal(await closeElectron(application), true, "Electron should exit gracefully");
+    application = undefined;
   },
 );

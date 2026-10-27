@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"/>
+<title>琉璃 · 剪贴板历史</title><link rel="stylesheet" href="common.css"/><link rel="stylesheet" href="clipboard.css"/>
+<script defer src="appearance.js"></script><script defer src="clipboard.js"></script></head>
+<body><main class="clipboard-card">
+<header class="search-bar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input id="search" type="search" placeholder="搜索复制记录…" aria-label="搜索剪贴板历史" autocomplete="off" spellcheck="false"/><button id="close" class="text-button" aria-label="收起剪贴板历史" title="Esc 收起">Esc</button></header>
+<p id="error" class="error" role="alert" hidden></p>
+<div id="entries" role="listbox" aria-label="复制记录"></div><p id="empty" class="empty" hidden>复制内容后会出现在这里</p>
+<footer><span id="status" role="status">正在加载…</span><div class="footer-actions"><button id="pause" class="text-button">暂停记录</button><button id="settings" class="text-button" title="剪贴板设置" aria-label="剪贴板设置"><svg viewBox="0 0 24 24"><path d="m10 3 4 0 .7 3 2.6 1.5 2.9-.8 2 3.5-2.2 2.2v3l2.2 2.2-2 3.5-2.9-.8-2.6 1.5-.7 3h-4l-.7-3-2.6-1.5-2.9.8-2-3.5L4 15.5v-3L1.8 10.3l2-3.5 2.9.8L9.3 6 10 3Z" transform="translate(1 -1) scale(.9)"/><circle cx="12" cy="12" r="3"/></svg></button></div></footer>
+<div class="keyboard-hint">↑↓ 选择 <span id="enter-hint">↵ 复制</span> <span>Ctrl+Delete 删除</span></div>
+</main></body></html>

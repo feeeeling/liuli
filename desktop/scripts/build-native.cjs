@@ -24,6 +24,11 @@ function buildNative() {
     "/nologo", "/target:exe", "/optimize+", `/out:${path.join(path.dirname(output), "ScreenCapture.exe")}`,
     "/reference:System.Drawing.dll", path.resolve(__dirname, "../native/ScreenCapture.cs"),
   ], { windowsHide: true, stdio: "pipe" });
+  execFileSync(path.join(framework, "csc.exe"), [
+    "/nologo", "/target:exe", "/optimize+", `/out:${path.join(path.dirname(output), "ClipboardMonitor.exe")}`,
+    "/reference:System.Windows.Forms.dll", "/reference:System.Drawing.dll", "/reference:System.Web.Extensions.dll",
+    path.resolve(__dirname, "../native/ClipboardMonitor.cs"),
+  ], { windowsHide: true, stdio: "pipe" });
   return output;
 }
 if (require.main === module) console.log(`Selection helper: ${buildNative()}`);

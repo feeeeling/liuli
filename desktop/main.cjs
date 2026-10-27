@@ -21,12 +21,14 @@ const { captureSelection } = require("./selection.cjs");
 const { constrain, fromEdge, heightLimit } = require("./panel-bounds.cjs");
 const { roundedRegion } = require("./window-appearance.cjs");
 const { WindowChrome } = require("./window-chrome.cjs");
+const { ClipboardHistory } = require("./clipboard-history.cjs");
+const { ClipboardWindow } = require("./clipboard-window.cjs");
 const windowChrome = process.platform === "win32" ? new WindowChrome({ packaged: app.isPackaged, resourcesPath: process.resourcesPath }) : null;
 module.exports.windowChrome = windowChrome;
 const { captureRegion, cancelCapture } = require("./screenshot.cjs");
 const { recognize } = require("./ocr.cjs");
 const { unwrapLatex, splitTranslation } = require("./renderer/result-format.js");
-const defaultShortcuts = { input: "Alt+A", clipboard: "Alt+D", screenshot: "Alt+S", ocr: "Alt+Shift+S", latex: "Alt+L", silent: "Alt+C" };
+const defaultShortcuts = { input: "Alt+A", clipboard: "Alt+D", screenshot: "Alt+S", ocr: "Alt+Shift+S", latex: "Alt+L", silent: "Alt+C", clipboardHistory: "Alt+V" };
 let capturingScreen = false;
 let history = [];
 let historyWrites = Promise.resolve();
@@ -37,6 +39,8 @@ if (process.env.LIULI_USER_DATA_DIR) {
 
 let window;
 let settingsWindow;
+let clipboardHistory;
+let clipboardUI;
 let tray;
 let daemon;
 let quitting = false;
@@ -87,6 +91,7 @@ function applyAppearance() {
   window.setBackgroundMaterial("none");
   settingsWindow.setBackgroundColor(nativeTheme.shouldUseDarkColors ? "#252527" : "#f3f3f5");
   applyPanelShape();
+  if (clipboardUI?.window && !clipboardUI.window.isDestroyed()) clipboardUI.window.setBackgroundMaterial("none");
   broadcast("appearance", appearance());
 }
 let preferences = {
@@ -95,6 +100,8 @@ let preferences = {
   hideOnBlur: true,
   wikiRoot: "",
   enhanceSilentOCR: true,
+  clipboardEnabled: true,
+  clipboardLimit: 500,
   shortcuts: { ...defaultShortcuts },
 };
 const token = randomUUID();
@@ -184,6 +191,8 @@ async function translateSelection() {
   }
   capturingSelection = true;
   try {
+    await clipboardHistory?.request("suspend", true).catch(() => {});
+    if (quitting) return { ok: false, error: "已退出。" };
     const { text, method } = await captureSelection({ packaged: app.isPackaged, resourcesPath: process.resourcesPath });
     if (!quitting) show({ type: "selection", text });
     return { ok: true, method };
@@ -193,6 +202,7 @@ async function translateSelection() {
       : error.message });
     return { ok: false, error: error.message };
   } finally {
+    await clipboardHistory?.request("suspend", false).catch(() => {});
     capturingSelection = false;
   }
 }
@@ -243,6 +253,7 @@ async function screenshotAction(action) {
   capturingScreen = true;
   const previousPanel = window.isVisible(), previousSettings = settingsWindow.isVisible();
   window.hide(); settingsWindow.hide();
+  if (clipboardUI?.window && !clipboardUI.window.isDestroyed()) clipboardUI.window.hide();
   try {
     // Let our own windows leave the desktop before showing live selection.
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -288,6 +299,10 @@ async function screenshotAction(action) {
   } finally { capturingScreen = false; }
 }
 function invokeAction(action) {
+  if (action === "clipboardHistory") {
+    if (capturingScreen || capturingSelection || panelGesture) return;
+    return void clipboardUI?.show().catch(error => { if (!quitting) notify(error.message); });
+  }
   if (action === "clipboard") return void translateSelection();
   if (action === "input") return show({ type: "input" });
   if (["screenshot", "ocr", "latex", "silent"].includes(action)) return void screenshotAction(action);
@@ -301,6 +316,19 @@ function send(target, channel, value) {
 
 function broadcast(channel, value) {
   for (const target of [window, settingsWindow]) send(target, channel, value);
+  if (channel === "appearance") send(clipboardUI?.window, channel, value);
+}
+function clipboardStatus(status = clipboardHistory?.status) {
+  return { count: 0, bytes: 0, available: false, error: "", ...status,
+    enabled: preferences.clipboardEnabled,
+    recording: Boolean(preferences.clipboardEnabled && status?.recording),
+    limit: preferences.clipboardLimit,
+    shortcut: preferences.shortcuts.clipboardHistory };
+}
+function publishClipboardStatus(status) {
+  const value = clipboardStatus(status);
+  send(settingsWindow, "clipboard-changed", value);
+  clipboardUI?.changed(value);
 }
 
 function state() {
@@ -319,6 +347,7 @@ function publishState() {
 async function showSettings(section = "general") {
   if (!settingsWindow || settingsWindow.isDestroyed()) return;
   if (settingsWindow.isMinimized()) settingsWindow.restore();
+  if (clipboardUI?.window && !clipboardUI.window.isDestroyed()) clipboardUI.window.hide();
   settingsWindow.show();
   settingsWindow.focus();
   send(settingsWindow, "command", { type: "section", section });
@@ -345,6 +374,8 @@ async function savePreferences(patch) {
     !["auto", "zh", "en", "ja", "ko", "fr", "de", "zh-TW"].includes(next.targetLang) ||
     typeof next.hideOnBlur !== "boolean" || typeof next.enhanceSilentOCR !== "boolean" ||
     typeof next.wikiRoot !== "string" || !["system", "light", "dark"].includes(next.theme)
+    || typeof next.clipboardEnabled !== "boolean"
+    || ![100, 500, 1000].includes(next.clipboardLimit)
   )
     throw new Error("设置值无效。");
   const keys = Object.values(next.shortcuts);
@@ -383,6 +414,9 @@ async function savePreferences(patch) {
     }
     throw error;
   }
+  if (clipboardHistory && (previous.clipboardEnabled !== next.clipboardEnabled || previous.clipboardLimit !== next.clipboardLimit))
+    await clipboardHistory.request("configure", { enabled: next.clipboardEnabled, limit: next.clipboardLimit }).catch(() => {});
+  publishClipboardStatus();
   publishState();
   return state();
 }
@@ -416,8 +450,8 @@ function handle(name, callback, roles = ["panel", "settings"]) {
         ? window
         : event.sender === settingsWindow?.webContents
           ? settingsWindow
-          : null;
-    const role = owner === window ? "panel" : "settings";
+          : event.sender === clipboardUI?.window?.webContents ? clipboardUI.window : null;
+    const role = owner === window ? "panel" : owner === settingsWindow ? "settings" : "clipboard";
     if (
       !owner ||
       event.senderFrame !== owner.webContents.mainFrame ||
@@ -439,7 +473,23 @@ function imagePayload(image) {
 
 function registerIPC() {
   handle("state", () => state());
-  handle("appearance", () => appearance());
+  handle("appearance", () => appearance(), ["panel", "settings", "clipboard"]);
+  handle("clipboard-status", () => clipboardStatus(), ["panel", "settings", "clipboard"]);
+  handle("clipboard-query", async query => {
+    if (typeof query !== "string" || query.length > 1000) throw new Error("无效搜索内容。");
+    const result = await clipboardHistory.request("query", query);
+    clipboardUI.fit(result.entries.length);
+    return { ...result, status: clipboardStatus(result.status) };
+  }, ["clipboard"]);
+  handle("clipboard-show", () => clipboardUI.show());
+  handle("clipboard-hide", () => clipboardUI.hide(), ["clipboard"]);
+  handle("clipboard-use", id => clipboardUI.use(id), ["clipboard"]);
+  handle("clipboard-remove", id => clipboardHistory.request("remove", id), ["clipboard"]);
+  handle("clipboard-clear", () => clipboardHistory.request("clear"), ["clipboard", "settings"]);
+  handle("clipboard-recording", enabled => {
+    if (typeof enabled !== "boolean") throw new Error("无效记录设置。");
+    return savePreferences({ clipboardEnabled: enabled });
+  }, ["clipboard", "settings"]);
   handle("capture", action => { if (!["screenshot", "ocr", "latex", "silent"].includes(action)) throw new Error("无效截图操作。"); return screenshotAction(action); });
   handle("history", () => history);
   handle("history-restore", id => {
@@ -456,7 +506,7 @@ function registerIPC() {
     preferenceWrites = pending.catch(() => {});
     return pending;
   }, ["settings"]);
-  handle("show-settings", (section) => showSettings(section));
+  handle("show-settings", (section) => showSettings(section), ["panel", "settings", "clipboard"]);
   handle("show-panel", () => show({ type: "input" }));
   handle("hide-panel", () => window.hide(), ["panel"]);
   handle("close-settings", () => settingsWindow.close(), ["settings"]);
@@ -743,6 +793,8 @@ else {
         };
       } catch {}
       if (!["system", "light", "dark"].includes(preferences.theme)) preferences.theme = "system";
+      if (typeof preferences.clipboardEnabled !== "boolean") preferences.clipboardEnabled = true;
+      if (![100, 500, 1000].includes(preferences.clipboardLimit)) preferences.clipboardLimit = 500;
       nativeTheme.themeSource = preferences.theme;
       try {
         const saved = JSON.parse(await fs.readFile(path.join(app.getPath("userData"), "panel-size.json"), "utf8"));
@@ -826,6 +878,14 @@ else {
         send(settingsWindow, "command", { type: "clear-secrets" });
         settingsWindow.hide();
       });
+      if (process.env.LIULI_CLIPBOARD_MONITOR !== "0") {
+        clipboardHistory = new ClipboardHistory({ directory: path.join(app.getPath("userData"), "clipboard-history"),
+          enabled: preferences.clipboardEnabled, limit: preferences.clipboardLimit, onChanged: publishClipboardStatus });
+      }
+      clipboardUI = new ClipboardWindow({ history: clipboardHistory,
+        chrome: windowChrome, primaryWindows: () => [window, settingsWindow], quitting: () => quitting });
+      module.exports.clipboardHistory = clipboardHistory;
+      module.exports.clipboardUI = clipboardUI;
       registerIPC();
       applyAppearance();
       nativeTheme.on("updated", applyAppearance);
@@ -841,6 +901,7 @@ else {
           { label: "截图 OCR", click: () => invokeAction("ocr") },
           { label: "公式转 LaTeX", click: () => invokeAction("latex") },
           { label: "静默 OCR", click: () => invokeAction("silent") },
+          { label: "剪贴板历史", click: () => invokeAction("clipboardHistory") },
           { type: "separator" },
           { label: "设置…", click: () => void showSettings() },
           { label: "退出", click: () => app.quit() },
@@ -875,24 +936,28 @@ else {
     });
   app.on("window-all-closed", () => {});
   app.on("before-quit", (event) => {
+    event.preventDefault();
+    if (quitting) return;
+    quitting = true;
     clearTimeout(panelMoveTimer);
     windowChrome?.close();
     cancelCapture();
     globalShortcut.unregisterAll();
-    if (quitting) return;
-    quitting = true;
-    if (!daemon) return;
-    event.preventDefault();
     taskController?.abort();
     loginController?.abort();
     const timer = setTimeout(() => {
-      daemon.kill();
+      daemon?.kill();
+      void clipboardHistory?.worker?.terminate();
       app.exit(0);
-    }, 2500);
-    daemon.once("exit", () => {
+    }, 3000);
+    const daemonStopped = new Promise(resolve => {
+      if (!daemon?.pid) return resolve();
+      daemon.once("exit", resolve);
+      try { daemon.postMessage("shutdown"); } catch { resolve(); }
+    });
+    void Promise.allSettled([daemonStopped, clipboardHistory?.close(), preferenceWrites, historyWrites, sizeWrites]).then(() => {
       clearTimeout(timer);
       app.exit(0);
     });
-    daemon.postMessage("shutdown");
   });
 }
