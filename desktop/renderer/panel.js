@@ -17,6 +17,7 @@ let shared = {
 let preferencesKey;
 let canContinueSession = false;
 let renderAsLatex = false;
+let activeRequestId;
 
 function message(id, text) {
   $(id).textContent = text || "";
@@ -154,6 +155,8 @@ async function run(action = "task", text) {
     return;
   }
   busy = true;
+  const requestId = crypto.randomUUID();
+  activeRequestId = requestId;
   cancelled = false;
   hasResult = false;
   renderAsLatex = mode === "latex" && action === "task";
@@ -171,7 +174,8 @@ async function run(action = "task", text) {
   }
   updateControls();
   try {
-    await api.task({
+    const completed = await api.task({
+      requestId,
       mode,
       action,
       keepSession: action !== "task" && canContinueSession,
@@ -181,11 +185,15 @@ async function run(action = "task", text) {
       targetLang: $("target").value,
       wikiRoot: shared.preferences.wikiRoot || undefined,
     });
+    // The invoke response is authoritative even when queued stream events have
+    // not reached a background renderer yet.
+    if (!cancelled && typeof completed === "string") $("result").textContent = completed;
     canContinueSession = !cancelled;
   } catch (error) {
     if (!cancelled) fail(error);
     else message("notice", "已停止生成。");
   } finally {
+    activeRequestId = undefined;
     busy = false;
     if (action === "task" && !cancelled) {
       if (mode === "latex") { $("result").textContent = window.resultFormat.unwrapLatex($("result").textContent); renderFormula(true); }
@@ -205,7 +213,8 @@ async function run(action = "task", text) {
     updateControls();
   }
 }
-api.onTask(({ event, data }) => {
+api.onTask(({ event, data, requestId }) => {
+  if (!busy || requestId !== activeRequestId) return;
   const result = $("result");
   const following = result.scrollHeight - result.scrollTop - result.clientHeight < 36;
   if (event === "delta") $("result").textContent += data.text;

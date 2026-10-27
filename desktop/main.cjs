@@ -509,7 +509,7 @@ function registerIPC() {
   );
   handle(
     "task",
-    task => performTask(task, event => send(window, "task-event", event)),
+    ({ requestId, ...task }) => performTask(task, event => send(window, "task-event", { ...event, requestId })),
     ["panel"],
   );
   handle("abort", async () => {

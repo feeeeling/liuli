@@ -331,6 +331,17 @@ test(
       /Invalid sender/,
     );
 
+    // Hold the first task's stream IPC until after its invoke response. The
+    // finished result must remain correct when those stale events are released.
+    await application.evaluate(({ BrowserWindow }) => {
+      const contents = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html")).webContents;
+      contents.testSend = contents.send;
+      contents.testHeld = [];
+      contents.send = function(channel, ...args) {
+        if (channel === "liuli:task-event") { this.testHeld.push([channel, ...args]); return; }
+        return this.testSend.call(this, channel, ...args);
+      };
+    });
     await panel.locator("#source").fill("Hello world");
     await panel.locator("#translate").click();
     await panel.waitForFunction(
@@ -338,6 +349,13 @@ test(
         document.getElementById("result").textContent === "你好，世界。" &&
         document.getElementById("stop").hidden,
     );
+    await application.evaluate(({ BrowserWindow }) => {
+      const contents = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html")).webContents;
+      contents.send = contents.testSend;
+      for (const event of contents.testHeld) contents.send(...event);
+      delete contents.testSend; delete contents.testHeld;
+    });
+    assert.equal(await panel.locator("#result").textContent(), "你好，世界。", "late stream IPC must not append to a finished result");
     await panel.locator("#copy").click();
     await panel.waitForFunction(() => document.getElementById("copy").title === "已复制");
     assert.equal(
