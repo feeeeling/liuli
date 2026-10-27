@@ -45,7 +45,7 @@ let application;
         await new Promise(r => setTimeout(r, 100));
       }
       assert.ok(overlay, "Use the actual OS shortcut to start screenshot selection.");
-      await overlay.waitForFunction(() => document.getElementById("screen").naturalWidth > 0);
+      await overlay.waitForFunction(() => document.body.dataset.ready === "true");
       const bounds = await fixture.evaluate(w => w.getBounds());
       const origin = await application.evaluate(({ screen }) => screen.getPrimaryDisplay().bounds);
       const x = bounds.x - origin.x + 8, y = bounds.y - origin.y + dy;

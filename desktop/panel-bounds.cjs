@@ -1,4 +1,10 @@
 const clamp = (value, min, max) => Math.max(Math.min(min, max), Math.min(Math.round(value), max));
+function heightLimit(preferredHeight, area) {
+  // A dragged height is the preferred reading size, with a little room for
+  // incoming text before scrolling. Never grow beyond the monitor's work area.
+  const preferred = preferredHeight || 640;
+  return Math.min(preferredHeight ? Math.max(preferred, Math.min(preferred + 180, 760)) : preferred, area.height - 24);
+}
 function constrain(bounds, area) {
   const width = clamp(bounds.width, 360, Math.min(1000, area.width - 24));
   const height = clamp(bounds.height, 340, area.height - 24);
@@ -14,4 +20,4 @@ function fromEdge(start, edge, delta, area) {
     y: edge.includes("n") ? start.y + start.height - size.height : start.y,
   }, area);
 }
-module.exports = { constrain, fromEdge };
+module.exports = { constrain, fromEdge, heightLimit };

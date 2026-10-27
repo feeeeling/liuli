@@ -18,12 +18,11 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { consumeSSE } = require("./stream.cjs");
 const { captureSelection } = require("./selection.cjs");
-const { constrain, fromEdge } = require("./panel-bounds.cjs");
+const { constrain, fromEdge, heightLimit } = require("./panel-bounds.cjs");
 const { roundedRegion } = require("./window-appearance.cjs");
 const { WindowChrome } = require("./window-chrome.cjs");
 const windowChrome = process.platform === "win32" ? new WindowChrome({ packaged: app.isPackaged, resourcesPath: process.resourcesPath }) : null;
 module.exports.windowChrome = windowChrome;
-const os = require("node:os");
 const { captureRegion, cancelCapture } = require("./screenshot.cjs");
 const { recognize } = require("./ocr.cjs");
 const { unwrapLatex, splitTranslation } = require("./renderer/result-format.js");
@@ -68,10 +67,11 @@ function applyPanelShape() {
   windowChrome?.round(window);
 }
 function applyAppearance() {
-  nativeGlass = process.platform === "win32" && Number(os.release().split(".")[2]) >= 22621 &&
-    !nativeTheme.prefersReducedTransparency && !nativeTheme.shouldUseHighContrastColors;
-  try { window.setBackgroundMaterial(nativeGlass ? "acrylic" : "none"); }
-  catch { nativeGlass = false; }
+  // The Windows system Acrylic backdrop has its own rectangular compositor
+  // surface, which can outlive a resize/region update around transparent corners.
+  // Render the translucent material inside Chromium's antialiased card instead.
+  nativeGlass = false;
+  window.setBackgroundMaterial("none");
   settingsWindow.setBackgroundColor(nativeTheme.shouldUseDarkColors ? "#252527" : "#f3f3f5");
   applyPanelShape();
   broadcast("appearance", appearance());
@@ -131,7 +131,7 @@ function fitPanel(area) {
   const bounds = window.getBounds();
   const size = manualPanelSize ? constrain({ ...bounds, ...manualPanelSize }, area) : null;
   const width = size?.width || Math.min(420, area.width - 24);
-  const maxHeight = size?.height || Math.min(640, area.height - 24);
+  const maxHeight = heightLimit(size?.height, area);
   if (Math.abs(bounds.width - width) >= 3 || bounds.height > maxHeight + 2)
     setPanelSize(width, Math.min(bounds.height, maxHeight));
   send(window, "layout", { maxHeight, userSized: Boolean(size), liveResize: Boolean(panelGesture) });
@@ -221,8 +221,8 @@ async function screenshotAction(action) {
   const previousPanel = window.isVisible(), previousSettings = settingsWindow.isVisible();
   window.hide(); settingsWindow.hide();
   try {
-    // Let DWM remove our windows before taking the frozen desktop snapshot.
-    await new Promise(resolve => setTimeout(resolve, 180));
+    // Let our own windows leave the desktop before showing live selection.
+    await new Promise(resolve => setTimeout(resolve, 50));
     const snapshot = await captureRegion();
     if (!snapshot) {
       if (previousSettings) settingsWindow.show();
@@ -468,7 +468,7 @@ function registerIPC() {
       if (!Number.isFinite(height) || panelGesture) return;
       const area = screen.getDisplayMatching(window.getBounds()).workArea;
       const bounds = window.getBounds();
-      const nextHeight = Math.min(Math.max(Math.ceil(height), 140), manualPanelSize?.height || 640, area.height - 24);
+      const nextHeight = Math.min(Math.max(Math.ceil(height), 140), heightLimit(manualPanelSize?.height, area));
       if (Math.abs(bounds.height - nextHeight) > 2)
         setPanelSize(Math.min(manualPanelSize?.width || 420, area.width - 24), nextHeight);
       const nextX = Math.max(area.x + 12, Math.min(bounds.x, area.x + area.width - bounds.width - 12));
@@ -509,7 +509,7 @@ function registerIPC() {
   );
   handle(
     "task",
-    task => performTask(task, event => send(window, "task-event", event)),
+    ({ requestId, ...task }) => performTask(task, event => send(window, "task-event", { ...event, requestId })),
     ["panel"],
   );
   handle("abort", async () => {
@@ -753,6 +753,7 @@ else {
       });
       window.on("moved", () => { if (window.isVisible() && !panelGesture) fitPanel(screen.getDisplayMatching(window.getBounds()).workArea); });
       window.on("resize", applyPanelShape);
+      window.on("show", applyPanelShape);
       screen.on("display-metrics-changed", () => fitPanel(screen.getDisplayMatching(window.getBounds()).workArea));
       window.on("close", (event) => {
         if (!quitting && tray) {
@@ -787,7 +788,8 @@ else {
           { label: "退出", click: () => app.quit() },
         ]),
       );
-      tray.on("click", () => show({ type: "input" }));
+      tray.on("click", () => tray.popUpContextMenu());
+      module.exports.tray = tray;
       let shortcutWarning;
       try {
         bindShortcuts(preferences.shortcuts);

@@ -26,4 +26,4 @@ document.addEventListener("pointerup", async event => {
 });
 document.addEventListener("keydown", event => { if (event.key === "Escape") void window.capture.cancel(); });
 document.addEventListener("contextmenu", event => { event.preventDefault(); void window.capture.cancel(); });
-window.capture.ready().then(url => { document.getElementById("screen").src = url; });
+window.capture.ready().then(() => { document.body.dataset.ready = "true"; });

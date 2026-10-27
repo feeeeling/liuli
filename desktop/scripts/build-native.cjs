@@ -20,6 +20,10 @@ function buildNative() {
     "/nologo", "/target:exe", "/optimize+", `/out:${path.join(path.dirname(output), "WindowChrome.exe")}`,
     "/reference:System.Web.Extensions.dll", path.resolve(__dirname, "../native/WindowChrome.cs"),
   ], { windowsHide: true, stdio: "pipe" });
+  execFileSync(path.join(framework, "csc.exe"), [
+    "/nologo", "/target:exe", "/optimize+", `/out:${path.join(path.dirname(output), "ScreenCapture.exe")}`,
+    "/reference:System.Drawing.dll", path.resolve(__dirname, "../native/ScreenCapture.cs"),
+  ], { windowsHide: true, stdio: "pipe" });
   return output;
 }
 if (require.main === module) console.log(`Selection helper: ${buildNative()}`);
