@@ -220,6 +220,18 @@ test(
     const settlePanel = async () => {
       try {
         await panel.waitForFunction(() => Math.abs(document.getElementById("panel").getBoundingClientRect().height - innerHeight) <= 4, null, { timeout: 4000 });
+        // Content fitting crosses renderer RAF and main-process IPC. A matching
+        // intermediate frame does not yet make the resize grip's coordinates stable.
+        await panel.evaluate(() => new Promise(resolve => {
+          let previous, stable = 0;
+          const frame = () => {
+            const key = `${innerWidth}:${innerHeight}:${document.getElementById("panel").getBoundingClientRect().height}`;
+            stable = key === previous ? stable + 1 : 0;
+            previous = key;
+            if (stable >= 6) resolve(); else requestAnimationFrame(frame);
+          };
+          requestAnimationFrame(frame);
+        }));
       } catch (error) {
         t.diagnostic(JSON.stringify(await panel.evaluate(() => ({ width: innerWidth, height: innerHeight, max: getComputedStyle(document.documentElement).getPropertyValue("--panel-max-height"), elements: [...document.querySelectorAll("#panel, .source-section, #source, #result-section, #result, #followup-form, footer")].map(el => ({ id: el.id || el.className || el.tagName, height: el.getBoundingClientRect().height, display: getComputedStyle(el).display })) }))));
         t.diagnostic(JSON.stringify(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map(w => ({title:w.getTitle(), bounds:w.getBounds(), content:w.getContentBounds(), min:w.getMinimumSize()})))));
@@ -885,5 +897,6 @@ test(
     for (const page of [settings, panel]) await page.waitForFunction(() => document.documentElement.dataset.appearance === "light");
     assert.equal(await application.evaluate(({ nativeTheme }) => nativeTheme.themeSource), "light");
     assert.equal(await closeElectron(application), true, "Electron should exit gracefully");
+    application = undefined;
   },
 );

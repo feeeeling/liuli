@@ -3,7 +3,9 @@ const { execFile } = require("node:child_process");
 // A failed Electron startup must not leave CI waiting forever in teardown.
 // Only terminate the process tree created by this test after graceful close stalls.
 async function closeElectron(application) {
-  const child = application.process();
+  let child;
+  try { child = application.process(); }
+  catch { return true; } // Playwright has already disposed a normally closed app.
   let timer, forced = false;
   const fallback = new Promise(resolve => {
     timer = setTimeout(() => {
