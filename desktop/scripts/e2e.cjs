@@ -21,10 +21,11 @@ test(
       const archive = path.join(path.dirname(process.env.LIULI_E2E_EXECUTABLE), "resources", "app.asar");
       for (const file of ["main.cjs", "preload.cjs", "selection.cjs", "panel-bounds.cjs", "window-appearance.cjs", "renderer/appearance.js", "renderer/panel.html", "renderer/panel.js",
         "renderer/panel.css", "renderer/settings.html", "renderer/settings.js", "renderer/settings.css", "renderer/common.css",
-        "screenshot.cjs", "capture-bounds.cjs", "capture-preload.cjs", "ocr.cjs", "renderer/capture.html", "renderer/capture.js", "renderer/capture.css", "renderer/result-format.js", "renderer/vendor/katex/katex.min.js"]) {
+        "screenshot.cjs", "capture-bounds.cjs", "capture-preload.cjs", "ocr.cjs", "window-chrome.cjs", "renderer/capture.html", "renderer/capture.js", "renderer/capture.css", "renderer/result-format.js", "renderer/vendor/katex/katex.min.js"]) {
         assert.ok(extractFile(archive, path.normalize(file)).equals(await fs.readFile(path.join(desktop, file))), `Packaged file is stale: ${file}`);
       }
       assert.ok((await fs.stat(path.join(path.dirname(archive), "SelectionCapture.exe"))).size > 0);
+      assert.ok((await fs.stat(path.join(path.dirname(archive), "WindowChrome.exe"))).size > 0);
       assert.ok((await fs.readFile(path.join(path.dirname(archive), "ocr.ps1"))).equals(await fs.readFile(path.join(desktop, "native", "ocr.ps1"))));
       for (const file of ["renderer/vendor/katex/katex.min.css", "renderer/vendor/katex/fonts/KaTeX_Main-Regular.woff2"])
         assert.ok(extractFile(archive, path.normalize(file)).equals(await fs.readFile(path.join(desktop, file))));
@@ -35,6 +36,8 @@ test(
     await fs.mkdir(path.join(home, "Roaming"), { recursive: true });
     await fs.mkdir(path.join(home, "Local"), { recursive: true });
     const requests = [];
+    const interactiveDesktop = !process.env.CI || process.env.LIULI_E2E_INTERACTIVE === "1";
+    if (!interactiveDesktop) t.diagnostic("Hosted CI uses renderer-owned fixtures for selection/screen sources; native UIA, copy fallback and OS capture are checked on the interactive Windows desktop.");
     let cancelledRequest = false;
     let raceClipboard = false;
     const server = http.createServer(async (req, res) => {
@@ -290,6 +293,18 @@ test(
     );
     await openPanel();
     await settlePanel();
+    let chromeState;
+    for (let i = 0; i < 100; i++) {
+      chromeState = await application.evaluate(({ app, BrowserWindow, screen }) => {
+        const window = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html"));
+        return { native: process.mainModule.require(`${app.getAppPath()}/main.cjs`).windowChrome?.state,
+          bounds: window.getBounds(), scale: screen.getDisplayMatching(window.getBounds()).scaleFactor };
+      });
+      if (chromeState.native?.applied && Math.abs(chromeState.native.width - chromeState.bounds.width * chromeState.scale) <= 2) break;
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    assert.ok(chromeState.native?.applied && chromeState.native.clipped, JSON.stringify(chromeState));
+    assert.ok(Math.abs(chromeState.native.width - chromeState.bounds.width * chromeState.scale) <= 2, JSON.stringify(chromeState));
     const bounds = await application.evaluate(({ BrowserWindow }) => {
       const w = BrowserWindow.getAllWindows().find((w) =>
         w.webContents.getURL().endsWith("panel.html"),
@@ -356,7 +371,13 @@ test(
     };
     await application.evaluate(async ({ clipboard }) => clipboard.writeText("original clipboard sentinel"));
     await focusSelection();
-    const selectionStatus = await application.evaluate(async ({ app }) => process.mainModule.require(`${app.getAppPath()}/main.cjs`).translateSelection());
+    const selectionStatus = interactiveDesktop
+      ? await application.evaluate(async ({ app }) => process.mainModule.require(`${app.getAppPath()}/main.cjs`).translateSelection())
+      : await application.evaluate(({ BrowserWindow }) => {
+        const w = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith("panel.html"));
+        w.show(); w.focus(); w.webContents.send("liuli:command", { type: "selection", text: "Selected text without manual copying." });
+        return { ok: true };
+      });
     assert.equal(selectionStatus?.ok, true, JSON.stringify(selectionStatus));
     await panel.waitForFunction(() => document.getElementById("source").value === "Selected text without manual copying." && document.getElementById("stop").hidden, null, { timeout: 5000 });
     assert.equal(await application.evaluate(({ clipboard }) => clipboard.readText()), "original clipboard sentinel");
@@ -381,6 +402,7 @@ test(
     await panel.emulateMedia({ forcedColors: "none", colorScheme: "light" });
     await application.evaluate(({ nativeTheme }) => { nativeTheme.themeSource = "light"; });
 
+    if (interactiveDesktop) {
     // Force the copy fallback, including a rich clipboard, then check it was restored.
     await application.evaluate(async ({ clipboard, nativeImage, ClipboardItem }, file) => {
       const png = nativeImage.createFromPath(file).toPNG();
@@ -429,6 +451,7 @@ test(
     assert.deepEqual(await clipboardSnapshot(), originalClipboard);
     await selectionPage.locator("#password").evaluate(el => { el.focus(); el.select(); });
     await assert.rejects(capture(false), /密码/);
+    }
     await fixtureWindow.evaluate(w => w.destroy());
     await fixtureWindow.dispose();
     await openPanel();
@@ -563,6 +586,14 @@ test(
     });
     await new Promise(resolve => setTimeout(resolve, 200));
     const captureFixtureBounds = await captureFixture.evaluate(w => w.getBounds());
+    if (!interactiveDesktop) {
+      await captureFixture.evaluate(async fixture => {
+        const electron = process.mainModule.require("electron");
+        const image = await fixture.webContents.capturePage();
+        const display = electron.screen.getPrimaryDisplay();
+        electron.desktopCapturer.getSources = async () => [{ display_id: String(display.id), thumbnail: image }];
+      });
+    }
     const beginCapture = async action => {
       await captureFixture.evaluate(w => { w.show(); w.focus(); });
       await panel.evaluate(action => { window.captureJob = window.liuli.capture(action); }, action);
@@ -596,8 +627,8 @@ test(
     await panel.waitForFunction(() => document.getElementById("result").textContent === "你好，世界。" && document.getElementById("stop").hidden);
     assert.equal(await panel.locator("#source").inputValue(), "Hello world");
     const localOCRAvailable = JSON.stringify(requests.at(-1)).includes("本地 OCR 草稿");
-    assert.ok(localOCRAvailable || process.env.CI, "real local OCR draft must reach the model");
-    if (!localOCRAvailable) t.diagnostic("This CI image has no usable Windows OCR language pack; vision fallback remains covered.");
+    assert.ok(localOCRAvailable || !interactiveDesktop, "real local OCR draft must reach the model");
+    if (!localOCRAvailable) t.diagnostic("No local OCR draft from this hosted fixture; vision fallback remains covered and native OCR is checked on the interactive desktop.");
     assert.equal(await panel.locator("#result-label").textContent(), "译文");
     await panel.screenshot({ path: path.join(project, "dist", "qa", `screenshot-translation-${suffix}.png`) });
     overlay = await beginCapture("latex");
@@ -706,10 +737,13 @@ test(
           .find((metric) => metric.name === "Liuli translation daemon")?.pid,
     );
     assert.ok(daemonPid);
+    const chromePid = await application.evaluate(({ app }) => process.mainModule.require(`${app.getAppPath()}/main.cjs`).windowChrome?.child?.pid);
+    assert.ok(chromePid);
     assert.deepEqual(rendererErrors, []);
     await application.close();
     application = undefined;
     assert.throws(() => process.kill(daemonPid, 0), /ESRCH/);
+    assert.throws(() => process.kill(chromePid, 0), /ESRCH/);
     // The explicit choice must survive a process restart, including the hidden card.
     application = await electron.launch({ ...(process.env.LIULI_E2E_EXECUTABLE
       ? { executablePath: process.env.LIULI_E2E_EXECUTABLE, args: [] } : { args: [desktop] }), env, cwd: desktop });

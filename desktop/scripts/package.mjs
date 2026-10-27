@@ -70,7 +70,7 @@ const outputs = await packager({
   asar: true,
   icon,
   ignore: [/^[/\\](node_modules|scripts|test|native)([/\\]|$)/, /package-lock\.json$/],
-  extraResource: [daemon, selectionHelper, path.join(desktop, "native", "ocr.ps1"), path.join(root, "docs", "assets", "icon.png")],
+  extraResource: [daemon, selectionHelper, path.join(desktop, "native", "bin", "WindowChrome.exe"), path.join(desktop, "native", "ocr.ps1"), path.join(root, "docs", "assets", "icon.png")],
   win32metadata: {
     CompanyName: "Liuli",
     FileDescription: "Liuli Translation",

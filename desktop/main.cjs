@@ -20,6 +20,9 @@ const { consumeSSE } = require("./stream.cjs");
 const { captureSelection } = require("./selection.cjs");
 const { constrain, fromEdge } = require("./panel-bounds.cjs");
 const { roundedRegion } = require("./window-appearance.cjs");
+const { WindowChrome } = require("./window-chrome.cjs");
+const windowChrome = process.platform === "win32" ? new WindowChrome({ packaged: app.isPackaged, resourcesPath: process.resourcesPath }) : null;
+module.exports.windowChrome = windowChrome;
 const os = require("node:os");
 const { captureRegion, cancelCapture } = require("./screenshot.cjs");
 const { recognize } = require("./ocr.cjs");
@@ -62,6 +65,7 @@ function applyPanelShape() {
   if (!window || window.isDestroyed()) return;
   const { width, height } = window.getBounds();
   window.setShape(roundedRegion(width, height));
+  windowChrome?.round(window);
 }
 function applyAppearance() {
   nativeGlass = process.platform === "win32" && Number(os.release().split(".")[2]) >= 22621 &&
@@ -169,7 +173,7 @@ async function translateSelection() {
     capturingSelection = false;
   }
 }
-module.exports = { translateSelection };
+module.exports.translateSelection = translateSelection;
 
 function recordHistory(task, result) {
   if (!result.trim() || task.action && task.action !== "task") return;
@@ -720,6 +724,7 @@ else {
         transparent: true,
         thickFrame: false,
         hasShadow: false,
+        roundedCorners: false,
         resizable: false,
         alwaysOnTop: true,
         skipTaskbar: true,
@@ -810,6 +815,7 @@ else {
     });
   app.on("window-all-closed", () => {});
   app.on("before-quit", (event) => {
+    windowChrome?.close();
     cancelCapture();
     globalShortcut.unregisterAll();
     if (quitting) return;

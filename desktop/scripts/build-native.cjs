@@ -16,6 +16,10 @@ function buildNative() {
     "/reference:System.Windows.Forms.dll", "/reference:System.Drawing.dll",
     "/reference:System.Web.Extensions.dll", source,
   ], { windowsHide: true, stdio: "pipe" });
+  execFileSync(path.join(framework, "csc.exe"), [
+    "/nologo", "/target:exe", "/optimize+", `/out:${path.join(path.dirname(output), "WindowChrome.exe")}`,
+    "/reference:System.Web.Extensions.dll", path.resolve(__dirname, "../native/WindowChrome.cs"),
+  ], { windowsHide: true, stdio: "pipe" });
   return output;
 }
 if (require.main === module) console.log(`Selection helper: ${buildNative()}`);
