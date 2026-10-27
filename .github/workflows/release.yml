@@ -37,7 +37,15 @@ jobs:
           Pop-Location
       - name: Archive Windows app
         shell: powershell
-        run: Compress-Archive -Path ./dist/Liuli-win32-x64 -DestinationPath ./Liuli-windows-x64.zip
+        run: |
+          # ZipFile shares reads of binaries and preserves UTF-8 names in the ZIP.
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::CreateFromDirectory(
+            (Resolve-Path ./dist/Liuli-win32-x64).Path,
+            (Join-Path $PWD 'Liuli-windows-x64.zip'),
+            [IO.Compression.CompressionLevel]::Optimal,
+            $true,
+            [Text.Encoding]::UTF8)
       - uses: actions/upload-artifact@v4
         with:
           name: Liuli-windows-x64
