@@ -40,6 +40,21 @@ private struct GeneralSettingsTab: View {
                         state.persist()
                     }
             }
+            Section("剪贴板") {
+                Toggle("记录复制历史", isOn: Binding(get: { state.clipboardHistory.enabled }, set: { state.clipboardHistory.setEnabled($0) }))
+                Picker("保留记录", selection: Binding(get: { state.clipboardHistory.limit }, set: { state.clipboardHistory.setLimit($0) })) {
+                    Text("100 条").tag(100); Text("500 条").tag(500); Text("1000 条").tag(1000)
+                }
+                Text(state.clipboardHistory.status + " · " + state.chord(for: .clipboardHistory).display + " 唤起")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("文字、富文本和图片仅加密保存在本机。选中后复制，由你自行粘贴。")
+                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button("清空剪贴板历史") { Task { await state.clipboardHistory.clear() } }
+                    Spacer()
+                    Button("打开剪贴板历史") { state.showClipboardHistory() }
+                }
+            }
             Section("追问上下文") {
                 HStack {
                     TextField("llm-wiki 目录", text: Bindable(state).wikiRoot)

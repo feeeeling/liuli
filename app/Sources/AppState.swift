@@ -1,10 +1,12 @@
 import AppKit
+import ClipboardMac
 import Foundation
 import Observation
 
 @MainActor
 @Observable
 final class AppState {
+    let clipboardHistory = ClipboardHistory()
     var mode: TaskMode = .translate
     var targetLang: TargetLang = .zh
     var sourceText = ""
@@ -153,6 +155,7 @@ final class AppState {
     }
 
     func inputTranslate() {
+        clipboardHistory.dismiss(restore: false);
         mode = .translate
         screenshot = nil
         sourceText = ""
@@ -193,7 +196,13 @@ final class AppState {
         onHidePanel?()
     }
 
+    func showClipboardHistory() {
+        guard !isSelectingRegion else { return }
+        clipboardHistory.toggle()
+    }
+
     func showPanel() {
+        clipboardHistory.dismiss(restore: false)
         isPanelVisible = true
         onShowPanel?()
     }
@@ -473,7 +482,9 @@ final class AppState {
         screenshot = nil
         resetFollowUp()
         needsKeyWindow = false
+        clipboardHistory.beginInternalCopy()
         let text = await SelectionCapture.readSelectedText()
+        clipboardHistory.endInternalCopy()
         captureReadingSnapshot()
         guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             sourceText = ""
@@ -492,6 +503,7 @@ final class AppState {
     }
 
     private func captureAndRun(mode: TaskMode) async {
+        clipboardHistory.dismiss(restore: false)
         self.mode = mode
         resetFollowUp()
         needsKeyWindow = false

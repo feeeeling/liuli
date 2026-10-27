@@ -10,7 +10,7 @@ struct LiuliApp: App {
             MenuBarContent()
                 .environment(delegate.appState)
         } label: {
-            MenuBarLeafIcon()
+            MenuBarLeafIcon().environment(delegate.appState)
         }
         .menuBarExtraStyle(.menu)
 
@@ -27,6 +27,7 @@ struct LiuliApp: App {
                 Button("公式转 LaTeX") { delegate.appState.formulaToLatex() }
                 Button("输入翻译") { delegate.appState.inputTranslate() }
                 Button("静默 OCR") { delegate.appState.silentOCR() }
+                Button("剪贴板历史") { delegate.appState.showClipboardHistory() }
             }
         }
     }
@@ -36,12 +37,15 @@ struct LiuliApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let appState = AppState()
     private var overlay: OverlayPanelController?
+    private var clipboardPanel: ClipboardPanelController?
     private var hotKeys: HotKeyManager?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         overlay = OverlayPanelController(state: appState)
+        clipboardPanel = ClipboardPanelController(history: appState.clipboardHistory) { [weak self] in self?.appState.openSettings?() }
         hotKeys = HotKeyManager(state: appState)
+        Task { await appState.clipboardHistory.start() }
         Permissions.requestNotifications()
         appState.refreshPermissions()
         Task {
@@ -58,6 +62,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await appState.refreshHealth() }
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        appState.clipboardHistory.stop()
+        Task { await appState.clipboardHistory.flush(); sender.reply(toApplicationShouldTerminate: true) }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         Task { await DaemonClient.shared.abort() }
         DaemonProcess.stop()
@@ -65,8 +75,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 private struct MenuBarLeafIcon: View {
+    @Environment(AppState.self) private var state
+    @Environment(\.openSettings) private var openSettings
     var body: some View {
-        Image(nsImage: Self.image)
+        Image(nsImage: Self.image).onAppear {
+            state.openSettings = { NSApp.activate(ignoringOtherApps: true); openSettings() }
+        }
     }
 
     private static var image: NSImage {
@@ -97,6 +111,7 @@ struct MenuBarContent: View {
             Button("公式转 LaTeX") { state.formulaToLatex() }
             Button("输入翻译") { state.inputTranslate() }
             Button("静默 OCR") { state.silentOCR() }
+            Button("剪贴板历史") { state.showClipboardHistory() }
             Divider()
             Button("打开辅助功能设置…") { Permissions.openAccessibilitySettings() }
             Button("打开屏幕录制设置…") { Permissions.openScreenRecordingSettings() }

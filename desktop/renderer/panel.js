@@ -8,6 +8,7 @@ let mode = "translate",
   hasResult = false;
 let followupOpen = false;
 let health = { ok: false };
+let configuringModel = false;
 let shared = {
   preferences: { targetLang: "zh", wikiRoot: "" },
   pinned: false,
@@ -34,11 +35,12 @@ function fail(error) {
   );
 }
 function updateControls() {
-  const blocked = busy || stopping || shared.taskRunning || shared.loginRunning;
+  const blocked = busy || stopping || configuringModel || shared.taskRunning || shared.loginRunning;
   $("translate").disabled = blocked || !health.ok;
   $("stop").hidden = !busy;
   $("explain").disabled = blocked || !hasResult;
-  $("followup-toggle").disabled = blocked || !hasResult;
+  $("explain").hidden = blocked || !hasResult || followupOpen;
+  $("model-label").disabled = blocked;
   $("copy").disabled = !hasResult;
   $("copy-source").disabled = !$("source").value;
   $("retry").disabled = blocked || !hasResult;
@@ -65,12 +67,18 @@ async function refresh() {
     health = await api.health();
     $("status").textContent = health.ok ? "已就绪" : "未登录";
     $("status").classList.toggle("ready", health.ok);
-    $("model-label").textContent = health.ok
-      ? health.model
-      : "在设置中添加账号";
-    $("model-label").title = health.ok
-      ? `${health.provider} / ${health.model} · 点击切换模型`
-      : "打开账号设置";
+    const catalog = await api.models();
+    const select = $("model-label");
+    select.replaceChildren();
+    const groups = new Map();
+    for (const model of catalog.models) {
+      if (!groups.has(model.provider)) { const group = document.createElement("optgroup"); group.label = model.provider; groups.set(model.provider, group); select.append(group); }
+      groups.get(model.provider).append(new Option(`${model.name}${model.vision ? " · 视觉" : ""}`, `${model.provider}/${model.id}`));
+    }
+    if (!catalog.models.length) select.append(new Option(health.ok ? health.model : "添加账号…", catalog.current || ""));
+    select.append(new Option("设置…", "__settings__"));
+    select.value = catalog.current || "";
+    select.title = health.ok ? `${health.provider} / ${health.model} · 切换模型` : "选择模型或添加账号";
   } catch (error) {
     fail(error);
     $("status").textContent = "连接失败";
@@ -92,8 +100,6 @@ function setMode(value) {
   $("panel").classList.toggle("ocr-view", value === "ocr");
   $("target").hidden = !["translate", "ocr-translate"].includes(value);
   $("formula-preview").hidden = $("formula-hint").hidden = true;
-  for (const button of $("modes").querySelectorAll("button"))
-    button.setAttribute("aria-pressed", String(button.dataset.mode === value));
   $("result-label").textContent = {
     translate: "译文",
     ocr: "识别结果",
@@ -102,10 +108,6 @@ function setMode(value) {
   }[mode];
   $("mode-label").textContent = { "ocr-translate": "图译", ocr: "OCR", latex: "LaTeX" }[mode] || "";
   $("mode-label").hidden = mode === "translate";
-}
-function setTools(open) {
-  $("tools-content").hidden = !open;
-  $("tools-toggle").setAttribute("aria-expanded", String(open));
 }
 function capturedSource(value) {
   $("source").classList.toggle("captured", value);
@@ -209,10 +211,7 @@ async function run(action = "task", text) {
     }
     hasResult = Boolean($("result").textContent);
     $("followup-form").hidden = !followupOpen || !hasResult;
-    $("followup-toggle").setAttribute(
-      "aria-expanded",
-      String(followupOpen && hasResult),
-    );
+    if (followupOpen && hasResult) $("followup").focus();
     updateControls();
   }
 }
@@ -229,31 +228,21 @@ api.onTask(({ event, data, requestId }) => {
 });
 api.onState(applyState);
 api.onChanged(() => void refresh());
-$("settings").addEventListener("click", () =>
-  api.showSettings("general").catch(fail),
-);
-$("model-label").addEventListener("click", () =>
-  api.showSettings(health.ok ? "models" : "accounts").catch(fail),
-);
+$("model-label").addEventListener("change", async () => {
+  const id = $("model-label").value;
+  if (id === "__settings__" || !id) { await refresh(); return api.showSettings(health.ok ? "models" : "accounts").catch(fail); }
+  configuringModel = true; updateControls(); message("error", "");
+  try { await api.setModel(id); }
+  catch (error) { fail(error); }
+  finally { await refresh(); configuringModel = false; updateControls(); }
+});
 $("hide-panel").addEventListener("click", () => api.hidePanel().catch(fail));
 $("pin").addEventListener("click", () => api.pin(!shared.pinned).catch(fail));
 $("source").addEventListener("input", () => { fitContent(); capturedSource(false); resizeSource(); updateControls(); });
-$("tools-toggle").addEventListener("click", () => setTools($("tools-content").hidden));
-for (const button of document.querySelectorAll("[data-capture]"))
-  button.addEventListener("click", () => { setTools(false); void api.capture(button.dataset.capture).catch(fail); });
 $("copy-source").addEventListener("click", () => api.copy($("source").value).catch(fail));
 $("retry").addEventListener("click", () => void run());
-$("modes").addEventListener("click", (event) => {
-  if (event.target.dataset.mode && !busy) setMode(event.target.dataset.mode);
-});
 $("translate").addEventListener("click", () => void run());
 $("explain").addEventListener("click", () => void run("explain"));
-$("followup-toggle").addEventListener("click", () => {
-  followupOpen = !followupOpen;
-  $("followup-form").hidden = !followupOpen;
-  $("followup-toggle").setAttribute("aria-expanded", String(followupOpen));
-  if (followupOpen) $("followup").focus();
-});
 $("stop").addEventListener("click", async () => {
   cancelled = true;
   stopping = true;
@@ -276,20 +265,8 @@ $("copy").addEventListener("click", async () => {
     fail(error);
   }
 });
-$("choose-image").addEventListener("click", async () => {
-  try {
-    setImage(await api.chooseImage());
-  } catch (error) {
-    fail(error);
-  }
-});
-$("paste-image").addEventListener("click", async () => {
-  try {
-    setImage(await api.clipboardImage());
-  } catch (error) {
-    fail(error);
-  }
-});
+async function chooseImage() { try { setImage(await api.chooseImage()); } catch (error) { fail(error); } }
+async function pasteImage() { try { setImage(await api.clipboardImage()); } catch (error) { fail(error); } }
 $("remove-image").addEventListener("click", () => {
   fitContent();
   image = undefined;
@@ -297,25 +274,16 @@ $("remove-image").addEventListener("click", () => {
   $("image-area").hidden = true;
   $("image-preview").removeAttribute("src");
 });
-$("clear").addEventListener("click", () => {
-  $("source").value = "";
-  resizeSource();
-  $("remove-image").click();
-  setTools(false);
-  fitContent();
-  capturedSource(false);
-  resizeSource();
-  $("source").focus();
-});
-$("paste-text").addEventListener("click", async () => {
-  try {
-    fitContent();
-    $("source").value = await api.clipboardText();
-    resizeSource();
-  } catch (error) {
-    fail(error);
-  }
-});
+function clearSource() {
+  $("source").value = ""; $("remove-image").click(); fitContent(); capturedSource(false); resizeSource(); $("source").focus();
+}
+async function panelAction(action, value) {
+  if (action === "mode") { if (!busy) setMode(value); }
+  if (action === "choose-image") await chooseImage();
+  if (action === "paste-image") await pasteImage();
+  if (action === "clear") clearSource();
+  if (action === "followup" && hasResult) { if (!followupOpen) await run("explain"); else $("followup").focus(); }
+}
 $("followup-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const text = $("followup").value.trim();
@@ -325,6 +293,7 @@ $("followup-form").addEventListener("submit", (event) => {
   }
 });
 document.addEventListener("keydown", (event) => {
+  if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); void api.panelMenu().catch(fail); }
   if (event.key === "Escape") {
     event.preventDefault();
     void api.hidePanel().catch(fail);
@@ -335,7 +304,7 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.ctrlKey && event.shiftKey && event.code === "KeyV") {
     event.preventDefault();
-    $("paste-image").click();
+    void pasteImage();
   }
 });
 document.addEventListener("paste", (event) => {
@@ -345,7 +314,7 @@ document.addEventListener("paste", (event) => {
     )
   ) {
     event.preventDefault();
-    $("paste-image").click();
+    void pasteImage();
   }
 });
 const initialized = (async () => {
@@ -353,11 +322,11 @@ const initialized = (async () => {
   await refresh();
 })();
 api.onCommand(async (command) => {
+  if (command.type === "panel-action") { await panelAction(command.action, command.value); return; }
   if (command.type === "error" || command.type === "notice") {
     message(command.type, command.message);
     return;
   }
-  setTools(false);
   fitContent();
   capturedSource(command.type !== "input");
   resizeSource();
