@@ -6,6 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const { _electron: electron } = require("playwright");
+const { closeElectron } = require("./electron-test.cjs");
 
 const desktop = path.resolve(__dirname, "..");
 const project = path.resolve(desktop, "..");
@@ -19,11 +20,12 @@ test(
     if (process.env.LIULI_E2E_EXECUTABLE) {
       const { extractFile } = await import("@electron/asar");
       const archive = path.join(path.dirname(process.env.LIULI_E2E_EXECUTABLE), "resources", "app.asar");
-      for (const file of ["main.cjs", "preload.cjs", "selection.cjs", "panel-bounds.cjs", "window-appearance.cjs", "renderer/appearance.js", "renderer/panel.html", "renderer/panel.js",
+      for (const file of ["clipboard-history.cjs", "clipboard-store.cjs", "clipboard-worker.cjs", "clipboard-window.cjs", "renderer/clipboard.html", "renderer/clipboard.js", "renderer/clipboard.css", "main.cjs", "preload.cjs", "selection.cjs", "panel-bounds.cjs", "window-appearance.cjs", "renderer/appearance.js", "renderer/panel.html", "renderer/panel.js",
         "renderer/panel.css", "renderer/settings.html", "renderer/settings.js", "renderer/settings.css", "renderer/common.css",
         "screenshot.cjs", "screen-capture.cjs", "capture-bounds.cjs", "capture-preload.cjs", "ocr.cjs", "window-chrome.cjs", "renderer/capture.html", "renderer/capture.js", "renderer/capture.css", "renderer/result-format.js", "renderer/vendor/katex/katex.min.js"]) {
         assert.ok(extractFile(archive, path.normalize(file)).equals(await fs.readFile(path.join(desktop, file))), `Packaged file is stale: ${file}`);
       }
+      assert.ok((await fs.stat(path.join(path.dirname(archive), "ClipboardMonitor.exe"))).size > 0);
       assert.ok((await fs.stat(path.join(path.dirname(archive), "SelectionCapture.exe"))).size > 0);
       assert.ok((await fs.stat(path.join(path.dirname(archive), "WindowChrome.exe"))).size > 0);
       assert.ok((await fs.stat(path.join(path.dirname(archive), "ScreenCapture.exe"))).size > 0);
@@ -130,6 +132,7 @@ test(
       LIULI_USER_DATA_DIR: path.join(home, "ui-profile"),
       PI_CODING_AGENT_DIR: agentDir,
       PI_OFFLINE: "1",
+      LIULI_CLIPBOARD_MONITOR: "0",
       ELECTRON_ENABLE_LOGGING: "1",
       LIULI_MODEL: "liuli-test/vision",
       LIULI_PROXY_PORTS: "0",
@@ -143,12 +146,12 @@ test(
         targetLang: "zh",
         hideOnBlur: true,
         wikiRoot: "",
-        shortcuts: { input: "Control+Alt+F11", clipboard: "Control+Alt+F12", screenshot: "Control+Alt+F1", ocr: "Control+Alt+F2", latex: "Control+Alt+F3", silent: "Control+Alt+F4" },
+        shortcuts: { input: "Control+Alt+F11", clipboard: "Control+Alt+F12", screenshot: "Control+Alt+F1", ocr: "Control+Alt+F2", latex: "Control+Alt+F3", silent: "Control+Alt+F4", clipboardHistory: "Control+Alt+F5" },
       }),
     );
     let application;
     t.after(async () => {
-      if (application) await application.close().catch(() => {});
+      if (application) await closeElectron(application);
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));
       await fs.rm(home, { recursive: true, force: true });
@@ -280,7 +283,7 @@ test(
     await settings.locator("#shortcut-input").press("Control+Alt+F9");
     await settings.locator("#save-shortcuts").click();
     await settings.waitForFunction(
-      () => document.getElementById("notice").textContent === "设置已保存。",
+      async () => (await window.liuli.state()).preferences.shortcuts.input === "Control+Alt+F9",
     );
     assert.equal(
       await application.evaluate(({ globalShortcut }) =>
@@ -859,7 +862,7 @@ test(
     const chromePid = await application.evaluate(({ app }) => process.mainModule.require(`${app.getAppPath()}/main.cjs`).windowChrome?.child?.pid);
     assert.ok(chromePid);
     assert.deepEqual(rendererErrors, []);
-    await application.close();
+    assert.equal(await closeElectron(application), true, "Electron should exit gracefully");
     application = undefined;
     assert.throws(() => process.kill(daemonPid, 0), /ESRCH/);
     assert.throws(() => process.kill(chromePid, 0), /ESRCH/);
@@ -876,6 +879,6 @@ test(
     await settings.waitForFunction(() => document.getElementById("theme").value === "light");
     for (const page of [settings, panel]) await page.waitForFunction(() => document.documentElement.dataset.appearance === "light");
     assert.equal(await application.evaluate(({ nativeTheme }) => nativeTheme.themeSource), "light");
-    await application.close();
+    assert.equal(await closeElectron(application), true, "Electron should exit gracefully");
   },
 );

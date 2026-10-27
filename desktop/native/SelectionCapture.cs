@@ -12,6 +12,11 @@ using System.Web.Script.Serialization;
 internal static class SelectionCapture
 {
     [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr window);
+    [DllImport("user32.dll")] static extern bool IsWindow(IntPtr window);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr window);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr window, int command);
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
     [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll")] static extern uint GetClipboardSequenceNumber();
@@ -38,6 +43,23 @@ internal static class SelectionCapture
     {
         Console.OutputEncoding = new UTF8Encoding(false);
         try {
+            if (args.Length >= 4 && args[0] == "--restore") {
+                var target = new IntPtr(Int64.Parse(args[1]));
+                uint expected = UInt32.Parse(args[2]), actual;
+                var sender = new IntPtr(Int64.Parse(args[3]));
+                WaitForModifiers();
+                var current = GetForegroundWindow();
+                GetWindowThreadProcessId(target, out actual);
+                bool restored = IsWindow(target) && actual == expected && (current == sender || current == target);
+                if (restored && IsIconic(target)) ShowWindow(target, 9);
+                if (restored) {
+                    restored = IsWindowVisible(target) && (current == target || SetForegroundWindow(target));
+                    Thread.Sleep(35);
+                    restored = restored && GetForegroundWindow() == target;
+                }
+                Console.Write(new JavaScriptSerializer().Serialize(new { restored }));
+                return;
+            }
             var foreground = GetForegroundWindow();
             string selected = null;
             bool password = false;
@@ -95,17 +117,9 @@ internal static class SelectionCapture
 
     static string CopySelection(IntPtr foreground)
     {
-        // Do not synthesize Ctrl+C while Alt/Control/Shift from the shortcut is held.
+        // Release shortcut modifiers before synthesizing Ctrl+C.
+        WaitForModifiers();
         var timer = Stopwatch.StartNew();
-        while ((GetAsyncKeyState(0x12) & 0x8000) != 0 ||
-               (GetAsyncKeyState(0x11) & 0x8000) != 0 ||
-               (GetAsyncKeyState(0x10) & 0x8000) != 0 ||
-               (GetAsyncKeyState(0x5B) & 0x8000) != 0 ||
-               (GetAsyncKeyState(0x5C) & 0x8000) != 0) {
-            if (timer.ElapsedMilliseconds > 1800)
-                throw new InvalidOperationException("请松开快捷键后重试。");
-            Thread.Sleep(15);
-        }
         if (GetForegroundWindow() != foreground)
             throw new InvalidOperationException("当前应用已切换，请重试。");
 
@@ -116,7 +130,6 @@ internal static class SelectionCapture
         if (original != null) {
             foreach (string format in ClipboardRead(() => original.GetFormats(false))) {
                 // OLE bookkeeping contains process-local handles, not user data.
-                // Re-publishing it can make OleFlushClipboard fail intermittently.
                 if (format == "DataObject" || format == "Ole Private Data") continue;
                 object value = ClipboardRead(() => original.GetData(format, false));
                 var stream = value as Stream;
@@ -153,15 +166,29 @@ internal static class SelectionCapture
                         copied = GetClipboardSequenceNumber();
                         return text;
                     }
-                } catch (ExternalException) { } // Other clipboard consumers may hold it briefly.
+                } catch (ExternalException) { }
             }
-            return null; // Never treat pre-existing clipboard text as a selection.
+            return null; // Never use pre-existing clipboard text as a selection.
         } finally {
-            // Do not overwrite a newer copy made by the user or another application.
+            // Preserve any newer copy made by the user or another application.
             if (copied != before && GetClipboardSequenceNumber() == copied) {
                 if (backup.GetFormats(false).Length == 0) Clipboard.Clear();
                 else Clipboard.SetDataObject(backup, true, 10, 50);
             }
+        }
+    }
+
+    static void WaitForModifiers()
+    {
+        var timer = Stopwatch.StartNew();
+        while ((GetAsyncKeyState(0x12) & 0x8000) != 0 ||
+               (GetAsyncKeyState(0x11) & 0x8000) != 0 ||
+               (GetAsyncKeyState(0x10) & 0x8000) != 0 ||
+               (GetAsyncKeyState(0x5B) & 0x8000) != 0 ||
+               (GetAsyncKeyState(0x5C) & 0x8000) != 0) {
+            if (timer.ElapsedMilliseconds > 1800)
+                throw new InvalidOperationException("请松开快捷键后重试。");
+            Thread.Sleep(15);
         }
     }
     static T ClipboardRead<T>(Func<T> read) {

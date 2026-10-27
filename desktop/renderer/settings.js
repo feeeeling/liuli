@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
 const api = window.liuli;
-const shortcutNames = ["input", "clipboard", "screenshot", "ocr", "latex", "silent"];
+const shortcutNames = ["input", "clipboard", "screenshot", "ocr", "latex", "silent", "clipboardHistory"];
 let providers = [],
   pendingPrompt,
   configuringModel = false;
@@ -22,6 +22,7 @@ function fail(error, account = false) {
   );
 }
 function setSection(name) {
+  const clipboard = name === "clipboard";
   if (!["general", "models", "accounts", "shortcuts"].includes(name))
     name = "general";
   for (const section of document.querySelectorAll("[data-page]"))
@@ -31,6 +32,7 @@ function setSection(name) {
       button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   }
+  if (clipboard) requestAnimationFrame(() => $("clipboard-settings").scrollIntoView({ block: "start" }));
 }
 function updateControls() {
   const blocked =
@@ -54,6 +56,8 @@ function applyState(value) {
     $("default-target").value = preferences.targetLang;
     $("hide-on-blur").checked = preferences.hideOnBlur;
     $("wiki-root").value = preferences.wikiRoot;
+    $("clipboard-enabled").checked = preferences.clipboardEnabled;
+    $("clipboard-limit").value = preferences.clipboardLimit;
     for (const name of shortcutNames) $("shortcut-" + name).value = preferences.shortcuts[name];
     $("enhance-silent").checked = preferences.enhanceSilentOCR;
     preferencesKey = key;
@@ -229,7 +233,7 @@ $("save-shortcuts").addEventListener("click", () =>
   }),
 );
 $("reset-shortcuts").addEventListener("click", () =>
-  save({ shortcuts: { input: "Alt+A", clipboard: "Alt+D", screenshot: "Alt+S", ocr: "Alt+Shift+S", latex: "Alt+L", silent: "Alt+C" } }),
+  save({ shortcuts: { input: "Alt+A", clipboard: "Alt+D", screenshot: "Alt+S", ocr: "Alt+Shift+S", latex: "Alt+L", silent: "Alt+C", clipboardHistory: "Alt+V" } }),
 );
 $("refresh").addEventListener("click", refreshModels);
 $("model").addEventListener("change", async () => {
@@ -346,3 +350,13 @@ function renderHistory(entries) {
 api.onHistory(renderHistory);
 api.history().then(renderHistory).catch(fail);
 $("clear-history").addEventListener("click", () => api.clearHistory().catch(fail));
+
+function renderClipboardStatus(status) {
+  $("clipboard-state").textContent = status.error || `${status.recording ? "正在记录" : status.enabled ? "正在准备" : "已暂停"} · ${status.count} 条 · ${status.shortcut} 唤起`;
+}
+api.onClipboardChanged(renderClipboardStatus);
+api.clipboardStatus().then(renderClipboardStatus).catch(fail);
+$("clipboard-enabled").addEventListener("change", () => save({ clipboardEnabled: $("clipboard-enabled").checked }));
+$("clipboard-limit").addEventListener("change", () => save({ clipboardLimit: Number($("clipboard-limit").value) }));
+$("open-clipboard").addEventListener("click", () => api.clipboardShow().catch(fail));
+$("clear-clipboard").addEventListener("click", () => api.clipboardClear().catch(fail));

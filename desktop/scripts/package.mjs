@@ -59,7 +59,7 @@ const outputs = await packager({
   asar: true,
   icon,
   ignore: [/^[/\\](node_modules|scripts|test|native)([/\\]|$)/, /package-lock\.json$/],
-  extraResource: [daemon, selectionHelper, path.join(desktop, "native", "bin", "WindowChrome.exe"), path.join(desktop, "native", "bin", "ScreenCapture.exe"), path.join(desktop, "native", "ocr.ps1"), path.join(root, "docs", "assets", "icon.png")],
+  extraResource: [daemon, selectionHelper, path.join(desktop, "native", "bin", "WindowChrome.exe"), path.join(desktop, "native", "bin", "ScreenCapture.exe"), path.join(desktop, "native", "bin", "ClipboardMonitor.exe"), path.join(desktop, "native", "ocr.ps1"), path.join(root, "docs", "assets", "icon.png")],
   win32metadata: {
     CompanyName: "Liuli",
     FileDescription: "Liuli Translation",
@@ -70,7 +70,7 @@ for (const output of outputs) {
   await cp(path.join(root, "LICENSE"), path.join(output, "LICENSE-Liuli.txt"));
   await writeFile(
     path.join(output, "使用说明.txt"),
-    "琉璃 Liuli Windows\r\n\r\n双击 Liuli.exe 打开设置，请保留文件夹内全部文件。\r\n设置：通用、快捷键、模型、账号；凭证与本机 Pi 共用。\r\n通用 → 外观可选择跟随系统、浅色、深色，立即生效并记住选择。\r\nAlt+A 输入翻译；Alt+D 划词翻译（无需手动复制）。\r\nAlt+S 截图翻译；Alt+Shift+S 截图 OCR；Alt+L 公式转 LaTeX；Alt+C 静默 OCR。\r\n拖动框选区域，Esc 或右键取消。公式结果包含预览与可复制源码。\r\n卡片自动适配内容，边缘/右下角可拖动调整；记住宽度和高度上限。\r\nEsc 收起，图钉固定，更多菜单打开设置、图片及各项操作。\r\n关闭窗口后驻留托盘，托盘或设置中可退出。\r\n",
+    "琉璃 Liuli Windows\r\n\r\n双击 Liuli.exe 打开设置，请保留文件夹内全部文件。\r\n设置：通用、快捷键、模型、账号；凭证与本机 Pi 共用。\r\n通用 → 外观可选择跟随系统、浅色、深色，立即生效并记住选择。\r\nAlt+V 搜索剪贴板历史；Enter 复制，Ctrl+Delete 删除选中记录，回到原应用按 Ctrl+V 粘贴。\r\nAlt+A 输入翻译；Alt+D 划词翻译（无需手动复制）。\r\nAlt+S 截图翻译；Alt+Shift+S 截图 OCR；Alt+L 公式转 LaTeX；Alt+C 静默 OCR。\r\n拖动框选区域，Esc 或右键取消。公式结果包含预览与可复制源码。\r\n卡片自动适配内容，边缘/右下角可拖动调整；记住宽度和高度上限。\r\nEsc 收起，图钉固定，更多菜单打开设置、图片及各项操作。\r\n关闭窗口后驻留托盘，托盘或设置中可退出。\r\n",
     "utf8",
   );
   console.log(`Windows app: ${path.join(output, "Liuli.exe")}`);
