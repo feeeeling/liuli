@@ -501,7 +501,8 @@ test(
     await panel.locator("#resize-grip").press("Shift+ArrowRight");
     await panel.locator("#resize-grip").press("Shift+ArrowDown");
     await panel.evaluate(() => window.liuli.endPanelResize());
-    await panel.waitForFunction(() => document.getElementById("panel").classList.contains("user-sized"));
+    await panel.waitForFunction(() => document.getElementById("panel").classList.contains("user-sized") &&
+      !document.getElementById("panel").classList.contains("live-resizing") && innerHeight < 340, null, { timeout: 5000 });
     const manual = await panel.evaluate(() => ({ width: innerWidth, height: innerHeight }));
     assert.ok(manual.width >= 465 && manual.height < 340, JSON.stringify(manual));
     const savedSize = JSON.parse(await fs.readFile(path.join(home, "ui-profile", "panel-size.json"), "utf8"));
