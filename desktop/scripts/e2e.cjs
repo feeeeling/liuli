@@ -358,6 +358,7 @@ test(
     assert.equal(await panel.locator("#result").textContent(), "你好，世界。", "late stream IPC must not append to a finished result");
     await panel.locator("#copy").click();
     await panel.waitForFunction(() => document.getElementById("copy").title === "已复制");
+    await panel.waitForFunction(expected => window.liuli.clipboardText().then(text => text === expected), "你好，世界。", { timeout: 5000 });
     assert.equal(
       await application.evaluate(({ clipboard }) => clipboard.readText()),
       "你好，世界。",
@@ -752,6 +753,8 @@ test(
     assert.equal(await panel.locator("#result").textContent(), String.raw`\frac{x^{2}}{2}+\sqrt{y}=\sum_{i=1}^{n}i`);
     await panel.locator("#copy").click();
     await panel.waitForFunction(() => document.getElementById("copy").title === "已复制");
+    await panel.waitForFunction(expected => window.liuli.clipboardText().then(text => text === expected),
+      await panel.locator("#result").textContent(), { timeout: 5000 });
     assert.equal(await application.evaluate(({ clipboard }) => clipboard.readText()), await panel.locator("#result").textContent());
     await panel.screenshot({ path: path.join(project, "dist", "qa", `latex-${suffix}.png`) });
     await settings.evaluate(() => window.liuli.savePreferences({ enhanceSilentOCR: false }));
