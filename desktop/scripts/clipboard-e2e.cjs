@@ -49,6 +49,17 @@ test('Native clipboard events, encryption, search, formats, pause and persistenc
   assert.ok(await application.evaluate(({app})=>process.mainModule.require(app.getAppPath()+'/main.cjs').clipboardUI.window.getBounds().height<=260),'short result list should remain compact');
   await page.locator('#search').press('Enter');await wait(()=>application.evaluate(({app})=>!process.mainModule.require(app.getAppPath()+'/main.cjs').clipboardUI.window.isVisible()),'popup not closed');await wait(async()=>await application.evaluate(({clipboard})=>clipboard.readText())==='琉璃 Alpha 可搜索 😀','use did not copy');
   assert.equal((await query('')).total,2,'selection should deduplicate');
+  await application.evaluate(({app})=>{
+    const history=process.mainModule.require(app.getAppPath()+'/main.cjs').clipboardHistory;
+    history.fastQueryForTest=history.request;
+    history.request=async function(op,value){if(op==='query'&&value==='beta')await new Promise(r=>setTimeout(r,200));return this.fastQueryForTest(op,value);};
+  });
+  page=await show();await page.locator('#search').fill('beta');
+  // No wait for the debounced search: immediate Enter must use this query.
+  await page.locator('#search').press('Enter');
+  await wait(()=>application.evaluate(({app})=>!process.mainModule.require(app.getAppPath()+'/main.cjs').clipboardUI.window.isVisible()),'immediate search did not close');
+  assert.equal(await application.evaluate(({clipboard})=>clipboard.readText()),'富文本 Beta');
+  await application.evaluate(({app})=>{const history=process.mainModule.require(app.getAppPath()+'/main.cjs').clipboardHistory;history.request=history.fastQueryForTest;delete history.fastQueryForTest;});
   page=await show();await page.locator('#search').fill('beta');await expect(page.locator('.entry')).toHaveCount(1);await page.locator('#search').press('Enter');await wait(()=>application.evaluate(({app})=>!process.mainModule.require(app.getAppPath()+'/main.cjs').clipboardUI.window.isVisible()),'popup not closed');
   const rich=await application.evaluate(async({clipboard})=>{for(const item of await clipboard.read())if(item.types.includes('text/html'))return(await item.getType('text/html')).text();});assert.match(rich,/<b>富文本 Beta<\/b>/);
   await application.evaluate(async({clipboard,nativeImage,ClipboardItem},file)=>{const png=nativeImage.createFromPath(file);if(png.isEmpty())throw Error('fixture PNG invalid');await clipboard.write([new ClipboardItem({'image/png':new Blob([png.toPNG()],{type:'image/png'})})]);},path.resolve(desktop,'../docs/assets/icon.png'));

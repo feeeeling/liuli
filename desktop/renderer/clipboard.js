@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const api = window.liuli;
-let entries = [], selected = 0, generation = 0, timer, using = false, state;
+let entries = [], selected = 0, generation = 0, timer, using = false, state, renderedQuery;
 function fail(error) { $("error").textContent = String(error.message || error).replace(/^Error invoking remote method '[^']+': Error: /, ""); $("error").hidden = false; }
 function select(index) {
   selected = Math.max(0, Math.min(entries.length - 1, index));
@@ -30,7 +30,7 @@ function render(result, reset) {
     copy.append(preview, meta);
     row.append(icon, copy);
     if (index < 9) { const number = document.createElement("span"); number.className = "entry-number"; number.textContent = `Alt ${index + 1}`; row.append(number); }
-    row.addEventListener("click", () => { select(index); void use(); });
+    row.addEventListener("click", () => { select(index); void use(index); });
     row.addEventListener("pointermove", () => select(index));
     $("entries").append(row);
   });
@@ -44,15 +44,24 @@ function render(result, reset) {
 }
 async function refresh(reset = false) {
   const current = ++generation;
+  const query = $("search").value;
   try {
-    const result = await api.clipboardQuery($("search").value);
-    if (current === generation) render(result, reset);
+    const result = await api.clipboardQuery(query);
+    if (current === generation) { render(result, reset); renderedQuery = query; return true; }
   } catch (error) { if (current === generation) fail(error); }
+  return false;
 }
-async function use() {
-  if (using || !entries[selected]) return;
+async function use(index) {
+  if (using) return;
   using = true; $("error").hidden = true;
-  try { await api.clipboardUse(entries[selected].id); }
+  try {
+    // Enter can arrive before the debounce timer or the last search response.
+    // Resolve the current query before choosing a record from the list.
+    clearTimeout(timer);
+    if (renderedQuery !== $("search").value && !await refresh(true)) return;
+    if (index !== undefined) { if (!entries[index]) return; select(index); }
+    if (entries[selected]) await api.clipboardUse(entries[selected].id);
+  }
   catch (error) { fail(error); }
   finally { using = false; }
 }
@@ -63,10 +72,10 @@ $("pause").addEventListener("click", () => void api.clipboardRecording(!state?.e
 document.addEventListener("keydown", event => {
   if (event.isComposing) return;
   if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); select(selected + (event.key === "ArrowDown" ? 1 : -1)); }
-  if (event.key === "Enter") { event.preventDefault(); void use(); }
+  if (event.key === "Enter" && !event.target.closest("button")) { event.preventDefault(); void use(); }
   if (event.key === "Escape") { event.preventDefault(); void api.clipboardHide().catch(fail); }
   if (event.ctrlKey && event.key === "Delete" && entries[selected]) { event.preventDefault(); void api.clipboardRemove(entries[selected].id).then(refresh).catch(fail); }
-  if (event.altKey && /^[1-9]$/.test(event.key) && entries[Number(event.key) - 1]) { event.preventDefault(); select(Number(event.key) - 1); void use(); }
+  if (event.altKey && /^[1-9]$/.test(event.key)) { event.preventDefault(); void use(Number(event.key) - 1); }
 });
 api.onCommand(command => { if (command.type === "clipboard-open") { $("search").value = ""; $("error").hidden = true; $("search").focus(); void refresh(true); } });
 api.onClipboardChanged(() => void refresh());
